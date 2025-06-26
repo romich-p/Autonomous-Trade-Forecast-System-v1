@@ -1,54 +1,37 @@
 import json
 import os
-from collections import defaultdict
+from datetime import datetime
 
-# Хранилище в памяти — просто списки
-candles = defaultdict(lambda: defaultdict(list))   # candles[ticker][tf]
-signals = defaultdict(list)                        # signals[ticker]
-
-DATA_PATH = "logs"
-
-def ensure_dir(path):
-    os.makedirs(path, exist_ok=True)
+# Папка для хранения свечей и сигналов
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
 def store_candle(data):
     ticker = data["ticker"]
     tf = data["timeframe"]
+    date = datetime.utcnow().strftime("%Y-%m-%d")
 
-    candle = {
-        "time": data["time"],
-        "open": float(data["open"]),
-        "high": float(data["high"]),
-        "low": float(data["low"]),
-        "close": float(data["close"]),
-        "volume": float(data["volume"])
-    }
-
-    candles[ticker][tf].append(candle)
-
-    # Сохраняем
-    ensure_dir(DATA_PATH)
-    path = os.path.join(DATA_PATH, f"{ticker}_{tf}_candles.json")
-    with open(path, "w") as f:
-        json.dump(candles[ticker][tf], f, indent=2)
+    filename = f"{DATA_DIR}/{ticker}_{tf}_{date}_candles.jsonl"
+    with open(filename, "a") as f:
+        f.write(json.dumps({
+            "time": data["time"],
+            "open": float(data["open"]),
+            "high": float(data["high"]),
+            "low": float(data["low"]),
+            "close": float(data["close"]),
+            "volume": float(data.get("volume", 0))  # безопасно, даже если volume нет
+        }) + "\n")
 
 def store_signal(data):
     ticker = data["ticker"]
-    signal = {
-        "time": data.get("time"),
-        "timeframe": data.get("timeframe"),
-        "action": data.get("action"),
-        "contracts": int(data.get("contracts", 0)),
-        "position_size": float(data.get("position_size", 0.0))
-    }
+    tf = data["timeframe"]
+    date = datetime.utcnow().strftime("%Y-%m-%d")
 
-    signals[ticker].append(signal)
-
-    ensure_dir(DATA_PATH)
-    path = os.path.join(DATA_PATH, f"{ticker}_signals.json")
-    with open(path, "w") as f:
-        json.dump(signals[ticker], f, indent=2)
-
-def get_recent_candles(ticker, tf, count=None):
-    data = candles[ticker][tf]
-    return data if count is None else data[-count:]
+    filename = f"{DATA_DIR}/{ticker}_{tf}_{date}_signals.jsonl"
+    with open(filename, "a") as f:
+        f.write(json.dumps({
+            "time": data["time"],
+            "action": data["action"],
+            "position_size": data["position_size"],
+            "contracts": data["contracts"]
+        }) + "\n")
