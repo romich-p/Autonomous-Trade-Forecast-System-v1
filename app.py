@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 from core.data_store import store_candle, store_signal
 from core.predictor import make_prediction
 import os
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
@@ -9,8 +13,8 @@ app = Flask(__name__)
 def webhook():
     data = request.get_json()
 
-    # Добавлено для отладки
-    print("Received JSON:", data)
+    # Вывод входящего JSON в лог Render
+    app.logger.info("Received JSON: %s", data)
 
     if not data or "event" not in data:
         return jsonify({"error": "Invalid payload"}), 400
@@ -30,5 +34,5 @@ def webhook():
         return jsonify({"error": "Unknown event type"}), 400
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render задаёт PORT через переменную окружения
+    port = int(os.environ.get("PORT", 5000))  # Render задаёт порт через переменную окружения
     app.run(host="0.0.0.0", port=port)
