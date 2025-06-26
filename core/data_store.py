@@ -35,3 +35,7 @@ def store_signal(data):
             "position_size": data["position_size"],
             "contracts": data["contracts"]
         }) + "\n")
+
+# Заглушка — безопасная реализация, чтобы не падал импорт
+def get_recent_candles(ticker, timeframe, limit=50):
+    return []
