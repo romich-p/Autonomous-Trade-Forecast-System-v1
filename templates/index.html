@@ -1,58 +1,43 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Autonomous Trade Forecast System</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    h1 { margin-bottom: 20px; }
-    button {
-      margin: 5px;
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      background-color: #007bff;
-      color: white;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    #plot {
-      margin-top: 20px;
-      max-width: 100%;
-    }
-  </style>
-  <script>
-    const timeframes = ['5S', '15S', '30S', '1', '2', '5', '15', '30'];
-    let currentTf = '15S';
+from flask import Flask, request, jsonify, send_file, render_template
+from core.data_store import store_candle, store_signal
+from core.plotter import plot_chart
 
-    function loadPlot(tf) {
-      currentTf = tf;
-      document.getElementById('plot').src = `/plot?ticker=GBPUSD&tf=${tf}`;
-    }
+app = Flask(__name__)
 
-    function autoRefresh() {
-      loadPlot(currentTf);
-    }
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-    setInterval(autoRefresh, 10000); // обновлять каждые 10 секунд
+@app.route('/plot')
+def plot():
+    ticker = request.args.get("ticker", "GBPUSD")
+    timeframe = request.args.get("timeframe", "15S")
+    path = plot_chart(ticker, timeframe)
+    if path:
+        return send_file(path, mimetype="image/png")
+    else:
+        return f"No data for {ticker} {timeframe}", 404
 
-    window.onload = () => {
-      const container = document.getElementById('buttons');
-      timeframes.forEach(tf => {
-        const btn = document.createElement('button');
-        btn.innerText = tf;
-        btn.onclick = () => loadPlot(tf);
-        container.appendChild(btn);
-      });
-      loadPlot(currentTf);
-    };
-  </script>
-</head>
-<body>
-  <h1>📊 Autonomous Trade Forecast System</h1>
-  <div id="buttons"></div>
-  <iframe id="plot" width="100%" height="600" frameborder="0"></iframe>
-</body>
-</html>
+@app.route('/webhook', methods=["POST"])
+def webhook():
+    data = request.json
+    app.logger.info(f"Received JSON: {data}")
+
+    event_type = data.get("event")
+
+    try:
+        if event_type == "candle":
+            store_candle(data)
+        elif event_type == "signal":
+            data.setdefault("time", request.headers.get("X-Time") or "")
+            store_signal(data, advanced=False)
+        elif event_type == "signal_advanced":
+            data.setdefault("time", request.headers.get("X-Time") or "")
+            store_signal(data, advanced=True)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        app.logger.error(f"Error: {e}")
+        return jsonify({"status": "error", "detail": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
