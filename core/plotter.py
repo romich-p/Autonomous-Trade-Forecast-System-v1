@@ -6,25 +6,24 @@ import io
 from .data_store import candles, signals, advanced_signals
 
 def plot_chart(ticker: str, timeframe: str):
-    df = candles.get((ticker, timeframe), [])
+    key = f"{ticker}_{timeframe}"
+    df = candles.get(key, [])
     if not df:
-        return f"No data for {ticker} {timeframe}"
+        return None
 
-    # Преобразуем в DataFrame
     df = pd.DataFrame(df)
     df["time"] = pd.to_datetime(df["time"])
     df.set_index("time", inplace=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    
-    # Отображаем свечи
+
     for idx, row in df.iterrows():
         color = 'green' if row['close'] >= row['open'] else 'red'
-        ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тень
-        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
+        ax.plot([idx, idx], [row['low'], row['high']], color='black')
+        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)
 
-    # Добавим сигналы
-    sigs = signals.get((ticker, timeframe), [])
+    # Простые сигналы
+    sigs = signals.get(key, [])
     for s in sigs:
         t = pd.to_datetime(s["time"])
         label = s["action"]
@@ -33,12 +32,11 @@ def plot_chart(ticker: str, timeframe: str):
         ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
     # Advanced сигналы
-    adv = advanced_signals.get((ticker, timeframe), [])
+    adv = advanced_signals.get(key, [])
     for s in adv:
         t = pd.to_datetime(s["time"])
         if s["action"] == "tp_sl":
-            side = s.get("side", "flat")
-            label = f"TP/SL: {side}"
+            label = f"TP/SL: {s.get('side', 'flat')}"
             ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
             ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
 
@@ -47,7 +45,6 @@ def plot_chart(ticker: str, timeframe: str):
     plt.xticks(rotation=45)
     plt.tight_layout()
 
-    # Конвертация в PNG
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
