@@ -1,69 +1,56 @@
-# core/plotter.py
-import plotly.graph_objects as go
-from core.data_store import candles, signals, advanced_signals
-from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+from flask import Response
+import io
+from .data_store import candles, signals, advanced_signals
 
-def plot_chart(ticker: str, timeframe: str, limit: int = 100):
-    key = (ticker, timeframe)
-    if key not in candles:
-        return f"No candles for {ticker} {timeframe}"
-
-    data = candles[key][-limit:]
-    df = [c for c in data if all(k in c for k in ["time", "open", "high", "low", "close"])]
-
+def plot_chart(ticker: str, timeframe: str):
+    df = candles.get((ticker, timeframe), [])
     if not df:
-        return f"Not enough candle data to plot"
+        return f"No data for {ticker} {timeframe}"
 
-    times = [datetime.fromisoformat(c["time"].replace("Z", "+00:00")) for c in df]
-    open_prices = [c["open"] for c in df]
-    high_prices = [c["high"] for c in df]
-    low_prices = [c["low"] for c in df]
-    close_prices = [c["close"] for c in df]
+    # Преобразуем в DataFrame
+    df = pd.DataFrame(df)
+    df["time"] = pd.to_datetime(df["time"])
+    df.set_index("time", inplace=True)
 
-    fig = go.Figure(data=[
-        go.Candlestick(
-            x=times,
-            open=open_prices,
-            high=high_prices,
-            low=low_prices,
-            close=close_prices,
-            name="Candles"
-        )
-    ])
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Отображаем свечи
+    for idx, row in df.iterrows():
+        color = 'green' if row['close'] >= row['open'] else 'red'
+        ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тень
+        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
 
-    # Overlay crossover signals
-    for sig in signals.get(key, []):
-        t = datetime.fromisoformat(sig["time"].replace("Z", "+00:00"))
-        color = "green" if sig["action"] == "buy" else "red"
-        fig.add_trace(go.Scatter(
-            x=[t], y=[sig["price"]],
-            mode="markers",
-            marker=dict(color=color, size=10),
-            name=f"Cross {sig['action']}"
-        ))
+    # Добавим сигналы
+    sigs = signals.get((ticker, timeframe), [])
+    for s in sigs:
+        t = pd.to_datetime(s["time"])
+        label = s["action"]
+        color = "blue" if label == "buy" else "orange"
+        ax.axvline(t, color=color, linestyle="--", alpha=0.5)
+        ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
-    # Overlay technical rating TP/SL signals
-    for s in advanced_signals.get(key, []):
-        t = datetime.fromisoformat(s["time"].replace("Z", "+00:00"))
-        price = s.get("price", None)
-        if not price:
-            continue
+    # Advanced сигналы
+    adv = advanced_signals.get((ticker, timeframe), [])
+    for s in adv:
+        t = pd.to_datetime(s["time"])
         if s["action"] == "tp_sl":
-            color = "gray"
-        elif s["action"] == "buy":
-            color = "blue"
-        elif s["action"] == "sell":
-            color = "orange"
-        else:
-            continue
+            side = s.get("side", "flat")
+            label = f"TP/SL: {side}"
+            ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
+            ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
 
-        fig.add_trace(go.Scatter(
-            x=[t], y=[price],
-            mode="markers",
-            marker=dict(color=color, size=8, symbol="x"),
-            name=f"{s['action']} ({s['side']})"
-        ))
+    ax.set_title(f"{ticker} {timeframe} Chart")
+    ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
+    plt.xticks(rotation=45)
+    plt.tight_layout()
 
-    fig.update_layout(title=f"{ticker} {timeframe} - Signals", xaxis_title="Time", yaxis_title="Price")
-    return fig.to_html()
-<вставим позже>
+    # Конвертация в PNG
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close(fig)
+
+    return Response(buf.getvalue(), mimetype='image/png')
