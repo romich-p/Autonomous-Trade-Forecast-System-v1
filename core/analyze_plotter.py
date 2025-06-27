@@ -1,77 +1,25 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-from flask import Response
-import io
-from .data_store import candles, signals, advanced_signals
-from .analyzer import analyze_market
+def analyze_trend_and_entry(df, adv_signals):
+    if df is None or len(df) < 20:
+        return ""
 
-def plot_chart(ticker: str, timeframe: str):
-    key = f"{ticker}_{timeframe}"
-    raw = candles.get(key, [])
-    if not raw:
-        return f"No data for {ticker} {timeframe}"
+    df["ma_fast"] = df["close"].rolling(5).mean()
+    df["ma_slow"] = df["close"].rolling(15).mean()
 
-    df = pd.DataFrame(raw)
-    df["time"] = pd.to_datetime(df["time"])
-    df.set_index("time", inplace=True)
+    trend_direction = "up" if df["ma_fast"].iloc[-1] > df["ma_slow"].iloc[-1] else "down"
+    trend_strength = round(abs(df["ma_fast"].iloc[-1] - df["ma_slow"].iloc[-1]), 5)
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    last_adv = next((s for s in reversed(adv_signals) if s["action"] == "tp_sl" and s.get("side") in ["long", "short"]), None)
+    if last_adv:
+        side = last_adv["side"]
+        sig_dir = "buy" if side == "long" else "sell"
+        alignment = "with trend" if (sig_dir == "buy" and trend_direction == "up") or (sig_dir == "sell" and trend_direction == "down") else "against trend"
+        entry_opt = 90 if alignment == "with trend" else 50
+    else:
+        alignment = "n/a"
+        entry_opt = "n/a"
 
-    # Свечи
-    for idx, row in df.iterrows():
-        color = 'green' if row['close'] >= row['open'] else 'red'
-        ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тени
-        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
-
-    # Простые сигналы
-    for s in signals.get((ticker, timeframe), []):
-        t = pd.to_datetime(s["time"])
-        label = s["action"]
-        color = "blue" if label == "buy" else "orange"
-        ax.axvline(t, color=color, linestyle="--", alpha=0.5)
-        ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
-
-    # Advanced сигналы
-    for s in advanced_signals.get((ticker, timeframe), []):
-        t = pd.to_datetime(s["time"])
-        if s["action"] == "tp_sl":
-            side = s.get("side", "flat")
-            if side == "flat":
-                label = "TP/SL: flat"
-            elif side == "long":
-                label = "T.LONG"
-            elif side == "short":
-                label = "T.SHORT"
-            else:
-                label = f"TP/SL: {side}"
-            ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
-            ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
-
-    # Прогноз
-    analysis = analyze_market(ticker, timeframe)
-    if analysis:
-        text = (
-            f"Trend: {analysis['trend_direction']}\n"
-            f"Strength: {analysis['trend_strength']}\n"
-            f"Entry: {analysis['entry_side']} ({analysis['entry_optimality']}%)"
-        )
-        ax.text(
-            1.01, 0.99, text,
-            transform=ax.transAxes,
-            verticalalignment='top',
-            fontsize=10,
-            bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
-        )
-
-    ax.set_title(f"{ticker} {timeframe} Chart")
-    ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close(fig)
-
-    return Response(buf.getvalue(), mimetype='image/png')
+    return (
+        f"Trend: {trend_direction}\n"
+        f"Strength: {trend_strength}\n"
+        f"Entry: {alignment} ({entry_opt}%)"
+    )
