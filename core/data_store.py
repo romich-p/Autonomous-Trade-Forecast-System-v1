@@ -1,38 +1,51 @@
 import os
 import datetime
 from tinydb import TinyDB, Query
+from tinydb.operations import set as set_op
 
-# === Пути и инициализация базы ===
 DB_PATH = os.path.join(os.path.dirname(__file__), "../data/db.json")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # создаём директорию, если не существует
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 db = TinyDB(DB_PATH)
 
-# === Ключи для хранения в TinyDB ===
-CANDLES_TABLE = "candles"
-SIGNALS_TABLE = "signals"
-ADV_SIGNALS_TABLE = "advanced_signals"
-
-# === Поддерживаемые таймфреймы ===
-SKIP_TIMEFRAMES = {"5S", "45S", "10m"}
-
-
-def _tf_key(ticker, timeframe):
-    return f"{ticker}_{timeframe}"
-
-
-# === Хранилище в памяти ===
-candles = {}
+# === Хранилища в памяти ===
+candles = {}  # {'GBPUSD_15S': [ {candle}, ... ]}
 signals = {}
 advanced_signals = {}
 
-# === Функция: Сохраняем свечу ===
+# === Загрузка при старте ===
+def load_data():
+    global candles, signals, advanced_signals
+
+    for row in db.table("candles").all():
+        key = row["key"]
+        if key not in candles:
+            candles[key] = []
+        candles[key].append(row["data"])
+
+    for row in db.table("signals").all():
+        key = row["key"]
+        if key not in signals:
+            signals[key] = []
+        signals[key].append(row["data"])
+
+    for row in db.table("adv_signals").all():
+        key = row["key"]
+        if key not in advanced_signals:
+            advanced_signals[key] = []
+        advanced_signals[key].append(row["data"])
+
+load_data()
+
+# === Сохранение свечи ===
 def store_candle(data):
-    tf = data["timeframe"]
-    if tf in SKIP_TIMEFRAMES:
+    key = f"{data['ticker']}_{data['timeframe']}"
+    if key not in candles:
+        candles[key] = []
+
+    if any(c['time'] == data['time'] for c in candles[key]):
         return
 
-    key = _tf_key(data["ticker"], tf)
-    entry = {
+    candle = {
         "time": data["time"],
         "open": float(data["open"]),
         "high": float(data["high"]),
@@ -41,70 +54,40 @@ def store_candle(data):
         "volume": float(data.get("volume", 0))
     }
 
-    # В память
-    candles.setdefault(key, [])
-    if any(c["time"] == entry["time"] for c in candles[key]):
-        return
-    candles[key].append(entry)
+    candles[key].append(candle)
     candles[key].sort(key=lambda x: x["time"])
 
-    # В базу
-    db.table(CANDLES_TABLE).insert({**entry, "key": key})
+    # Сохраняем в TinyDB
+    db.table("candles").insert({"key": key, "data": candle})
 
 
-# === Функция: Получаем последние N свечей ===
-def get_recent_candles(ticker_tf, n=100):
-    return candles.get(ticker_tf, [])[-n:]
-
-
-# === Функция: Сохраняем сигнал ===
+# === Сохранение сигнала ===
 def store_signal(data, advanced=False):
-    tf = data["timeframe"]
-    if tf in SKIP_TIMEFRAMES:
-        return
+    table = "adv_signals" if advanced else "signals"
+    target = advanced_signals if advanced else signals
 
-    key = _tf_key(data["ticker"], tf)
-    time = data.get("time", datetime.datetime.utcnow().isoformat())
-    record = {
-        "ticker": data["ticker"],
-        "timeframe": tf,
-        "time": time,
+    key = f"{data['ticker']}_{data['timeframe']}"
+    if key not in target:
+        target[key] = []
+
+    signal_data = {
+        "time": data.get("time", datetime.datetime.utcnow().isoformat()),
         "action": data["action"],
     }
 
     if advanced:
-        record["sltp"] = float(data.get("sltp", 0))
-        record["side"] = data.get("side", "flat")
-        advanced_signals.setdefault(key, []).append(record)
-        db.table(ADV_SIGNALS_TABLE).insert({**record, "key": key})
+        signal_data["side"] = data.get("side", "flat")
+        signal_data["sltp"] = float(data.get("sltp", 0))
     else:
-        record["contracts"] = float(data.get("contracts", 0))
-        record["position_size"] = float(data.get("position_size", 0))
-        signals.setdefault(key, []).append(record)
-        db.table(SIGNALS_TABLE).insert({**record, "key": key})
+        signal_data["contracts"] = float(data.get("contracts", 0))
+        signal_data["position_size"] = float(data.get("position_size", 0))
+
+    target[key].append(signal_data)
+
+    # Сохраняем в TinyDB
+    db.table(table).insert({"key": key, "data": signal_data})
 
 
-# === Функция: Загрузка из базы при старте ===
-def load_from_db():
-    for row in db.table(CANDLES_TABLE).all():
-        key = row["key"]
-        candles.setdefault(key, []).append({
-            "time": row["time"],
-            "open": row["open"],
-            "high": row["high"],
-            "low": row["low"],
-            "close": row["close"],
-            "volume": row.get("volume", 0),
-        })
-
-    for row in db.table(SIGNALS_TABLE).all():
-        key = _tf_key(row["ticker"], row["timeframe"])
-        signals.setdefault(key, []).append(row)
-
-    for row in db.table(ADV_SIGNALS_TABLE).all():
-        key = _tf_key(row["ticker"], row["timeframe"])
-        advanced_signals.setdefault(key, []).append(row)
-
-
-# Загружаем при старте
-load_from_db()
+# === Получить последние N свечей ===
+def get_recent_candles(ticker_tf, n=100):
+    return candles.get(ticker_tf, [])[-n:]
