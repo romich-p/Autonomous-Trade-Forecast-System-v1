@@ -1,65 +1,47 @@
 import os
 import json
-from pathlib import Path
 from tinydb import TinyDB, Query
 
-# Новый путь к базе данных — на постоянном хранилище Render
-DB_PATH = Path("/persistent/db.json")
-os.makedirs(DB_PATH.parent, exist_ok=True)
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "db.json")
 db = TinyDB(DB_PATH)
 
-# Таблицы
-candles_table = db.table("candles")
-signals_table = db.table("signals")
-adv_table = db.table("advanced")
+# Кэш в памяти
+candles = {}
+signals = {}
+advanced_signals = {}
 
-# В памяти (кеш)
-candles = {}           # { "GBPUSD_15S": [...] }
-signals = {}           # { ("GBPUSD", "15S"): [...] }
-advanced_signals = {}  # { ("GBPUSD", "15S"): [...] }
-
-def load_data():
+def load_database():
     global candles, signals, advanced_signals
+    try:
+        candles = db.table("candles").all()[0] if db.table("candles").all() else {}
+        signals = db.table("signals").all()[0] if db.table("signals").all() else {}
+        advanced_signals = db.table("advanced_signals").all()[0] if db.table("advanced_signals").all() else {}
+        print(f"[DB] Загружено: {len(candles)} свечей, {len(signals)} сигналов, {len(advanced_signals)} advanced")
+    except Exception as e:
+        print("[DB] Ошибка загрузки:", e)
 
-    candles = {}
-    for entry in candles_table.all():
-        key = entry["key"]
-        if key not in candles:
-            candles[key] = []
-        candles[key].append(entry["data"])
-
-    signals = {}
-    for entry in signals_table.all():
-        key = tuple(entry["key"])
-        if key not in signals:
-            signals[key] = []
-        signals[key].append(entry["data"])
-
-    advanced_signals = {}
-    for entry in adv_table.all():
-        key = tuple(entry["key"])
-        if key not in advanced_signals:
-            advanced_signals[key] = []
-        advanced_signals[key].append(entry["data"])
-
-    print(f"[DB] Загружено: {sum(len(v) for v in candles.values())} свечей, "
-          f"{sum(len(v) for v in signals.values())} сигналов, "
-          f"{sum(len(v) for v in advanced_signals.values())} advanced")
+def save_database():
+    db.table("candles").truncate()
+    db.table("candles").insert(candles)
+    db.table("signals").truncate()
+    db.table("signals").insert(signals)
+    db.table("advanced_signals").truncate()
+    db.table("advanced_signals").insert(advanced_signals)
 
 def store_candle(ticker: str, timeframe: str, candle: dict):
     key = f"{ticker}_{timeframe}"
     candles.setdefault(key, []).append(candle)
-    candles_table.insert({"key": key, "data": candle})
+    candles[key] = sorted({c["time"]: c for c in candles[key]}.values(), key=lambda x: x["time"])
+    save_database()
 
 def store_signal(ticker: str, timeframe: str, signal: dict):
     key = (ticker, timeframe)
     signals.setdefault(key, []).append(signal)
-    signals_table.insert({"key": list(key), "data": signal})
+    save_database()
 
-def store_advanced(ticker: str, timeframe: str, signal: dict):
+def store_advanced(ticker: str, timeframe: str, advanced: dict):
     key = (ticker, timeframe)
-    advanced_signals.setdefault(key, []).append(signal)
-    adv_table.insert({"key": list(key), "data": signal})
-
-# Инициализация при старте
-load_data()
+    advanced_signals.setdefault(key, []).append(advanced)
+    save_database()
