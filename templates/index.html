@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Data Plotter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f7f7f7;
+        }
+        h1 {
+            color: #333;
+        }
+        .buttons {
+            margin: 20px 0;
+        }
+        .buttons button {
+            padding: 10px 15px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>GBP/USD Timeframe Viewer</h1>
+    <div class="buttons">
+        <button onclick="redirect('5S')">5s</button>
+        <button onclick="redirect('15S')">15s</button>
+        <button onclick="redirect('30S')">30s</button>
+        <button onclick="redirect('1')">1m</button>
+        <button onclick="redirect('2')">2m</button>
+        <button onclick="redirect('5')">5m</button>
+        <button onclick="redirect('15')">15m</button>
+        <button onclick="redirect('30')">30m</button>
+        <button onclick="redirect('45')">45m</button>
+    </div>
+
+    <script>
+        function redirect(tf) {
+            window.location.href = `/plot?pair=GBPUSD&tf=${tf}`;
+        }
+    </script>
+</body>
+</html>
