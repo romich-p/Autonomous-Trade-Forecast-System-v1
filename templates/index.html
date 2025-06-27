@@ -1,47 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forex Data Plotter</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: #f7f7f7;
-        }
-        h1 {
-            color: #333;
-        }
-        .buttons {
-            margin: 20px 0;
-        }
-        .buttons button {
-            padding: 10px 15px;
-            margin: 5px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Autonomous Trade Forecast System</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    h1 { margin-bottom: 20px; }
+    button {
+      margin: 5px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #plot {
+      margin-top: 20px;
+      max-width: 100%;
+    }
+  </style>
+  <script>
+    const timeframes = ['5S', '15S', '30S', '1', '2', '5', '15', '30'];
+    let currentTf = '15S';
+
+    function loadPlot(tf) {
+      currentTf = tf;
+      document.getElementById('plot').src = `/plot?ticker=GBPUSD&tf=${tf}`;
+    }
+
+    function autoRefresh() {
+      loadPlot(currentTf);
+    }
+
+    setInterval(autoRefresh, 10000); // обновлять каждые 10 секунд
+
+    window.onload = () => {
+      const container = document.getElementById('buttons');
+      timeframes.forEach(tf => {
+        const btn = document.createElement('button');
+        btn.innerText = tf;
+        btn.onclick = () => loadPlot(tf);
+        container.appendChild(btn);
+      });
+      loadPlot(currentTf);
+    };
+  </script>
 </head>
 <body>
-    <h1>GBP/USD Timeframe Viewer</h1>
-    <div class="buttons">
-        <button onclick="redirect('5S')">5s</button>
-        <button onclick="redirect('15S')">15s</button>
-        <button onclick="redirect('30S')">30s</button>
-        <button onclick="redirect('1')">1m</button>
-        <button onclick="redirect('2')">2m</button>
-        <button onclick="redirect('5')">5m</button>
-        <button onclick="redirect('15')">15m</button>
-        <button onclick="redirect('30')">30m</button>
-        <button onclick="redirect('45')">45m</button>
-    </div>
-
-    <script>
-        function redirect(tf) {
-            window.location.href = `/plot?pair=GBPUSD&tf=${tf}`;
-        }
-    </script>
+  <h1>📊 Autonomous Trade Forecast System</h1>
+  <div id="buttons"></div>
+  <iframe id="plot" width="100%" height="600" frameborder="0"></iframe>
 </body>
 </html>
