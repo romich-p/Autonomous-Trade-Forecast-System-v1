@@ -1,40 +1,48 @@
-from flask import Flask, request, jsonify, send_file, render_template
-from core.data_store import store_candle, store_signal
+from flask import Flask, request, send_file, render_template
+from core.data_store import store_candle, store_signal, store_advanced
 from core.plotter import plot_chart
 
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/plot')
-def plot():
-    ticker = request.args.get("ticker", "GBPUSD")
-    timeframe = request.args.get("timeframe", "15S")
-    result = plot_chart(ticker, timeframe)
-    return result  # Это уже готовый Response (png или текст)
-
-@app.route('/webhook', methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.json
-    app.logger.info(f"Received JSON: {data}")
-
-    event_type = data.get("event")
-
     try:
-        if event_type == "candle":
-            store_candle(data)
-        elif event_type == "signal":
-            data.setdefault("time", request.headers.get("X-Time") or "")
-            store_signal(data, advanced=False)
-        elif event_type == "signal_advanced":
-            data.setdefault("time", request.headers.get("X-Time") or "")
-            store_signal(data, advanced=True)
-        return jsonify({"status": "ok"})
+        data = request.json
+        ticker = data["ticker"]
+        timeframe = data["timeframe"]
+        signal_type = data["type"]
+
+        if signal_type == "candle":
+            store_candle(ticker, timeframe, data["data"])
+        elif signal_type == "signal":
+            store_signal(ticker, timeframe, data["data"])
+        elif signal_type == "tp_sl":
+            store_advanced(ticker, timeframe, data["data"])
+        else:
+            return "Unknown signal type", 400
+
+        return "ok", 200
     except Exception as e:
-        app.logger.error(f"Error: {e}")
-        return jsonify({"status": "error", "detail": str(e)}), 500
+        print(f"[Webhook ERROR] {e}")
+        return f"Error: {e}", 500
+
+@app.route("/plot")
+def plot():
+    ticker = request.args.get("ticker")
+    timeframe = request.args.get("timeframe")
+    try:
+        image_path = plot_chart(ticker, timeframe)
+        if image_path:
+            return send_file(image_path, mimetype="image/png")
+        else:
+            return "No data", 404
+    except Exception as e:
+        print(f"[Plot ERROR] {e}")
+        return f"Error: {e}", 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=False, host="0.0.0.0", port=10000)
