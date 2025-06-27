@@ -1,9 +1,9 @@
 import datetime
 
 # === Хранилище данных ===
-candles = {}  # Формат: {'GBPUSD_15S': [ {candle}, ... ]}
-signals = []  # Простые сигналы (от crossover стратегии)
-advanced_signals = []  # Сигналы от технической стратегии
+candles = {}  # {'GBPUSD_15S': [ {candle}, ... ]}
+signals = {}  # {'GBPUSD_15S': [ {signal}, ... ]}
+advanced_signals = {}  # {'GBPUSD_15S': [ {adv_signal}, ... ]}
 
 # === Функция: Сохраняем свечу ===
 def store_candle(data):
@@ -15,7 +15,6 @@ def store_candle(data):
     if any(c['time'] == data['time'] for c in candles[key]):
         return
 
-    # Добавляем новую свечу
     candles[key].append({
         "time": data["time"],
         "open": float(data["open"]),
@@ -24,8 +23,6 @@ def store_candle(data):
         "close": float(data["close"]),
         "volume": float(data.get("volume", 0))
     })
-
-    # Сортировка по времени
     candles[key].sort(key=lambda x: x["time"])
 
 # === Функция: Получить последние N свечей ===
@@ -34,7 +31,11 @@ def get_recent_candles(ticker_tf, n=100):
 
 # === Функция: Сохраняем сигнал ===
 def store_signal(data, advanced=False):
+    key = f"{data['ticker']}_{data['timeframe']}"
     target = advanced_signals if advanced else signals
+
+    if key not in target:
+        target[key] = []
 
     signal_data = {
         "ticker": data["ticker"],
@@ -51,4 +52,4 @@ def store_signal(data, advanced=False):
         signal_data["contracts"] = float(data.get("contracts", 0))
         signal_data["position_size"] = float(data.get("position_size", 0))
 
-    target.append(signal_data)
+    target[key].append(signal_data)
