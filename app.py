@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_file, render_template
-from core.data_store import store_candle, store_signal, store_advanced_signal
+from core.data_store import store_candle, store_signal
 from core.plotter import plot_chart
 
 app = Flask(__name__)
@@ -29,11 +29,10 @@ def webhook():
         if event_type == "candle":
             store_candle(data)
         elif event_type == "signal":
-            # Добавим время если отсутствует
             data.setdefault("time", request.headers.get("X-Time") or "")
             store_signal(data, advanced=False)
         elif event_type == "signal_advanced":
-            store_advanced_signal(data)
+            store_signal(data, advanced=True)
         return jsonify({"status": "ok"})
     except Exception as e:
         app.logger.error(f"Error: {e}")
