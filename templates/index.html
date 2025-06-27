@@ -1,43 +1,35 @@
-from flask import Flask, request, jsonify, send_file, render_template
-from core.data_store import store_candle, store_signal
-from core.plotter import plot_chart
-
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/plot')
-def plot():
-    ticker = request.args.get("ticker", "GBPUSD")
-    timeframe = request.args.get("timeframe", "15S")
-    path = plot_chart(ticker, timeframe)
-    if path:
-        return send_file(path, mimetype="image/png")
-    else:
-        return f"No data for {ticker} {timeframe}", 404
-
-@app.route('/webhook', methods=["POST"])
-def webhook():
-    data = request.json
-    app.logger.info(f"Received JSON: {data}")
-
-    event_type = data.get("event")
-
-    try:
-        if event_type == "candle":
-            store_candle(data)
-        elif event_type == "signal":
-            data.setdefault("time", request.headers.get("X-Time") or "")
-            store_signal(data, advanced=False)
-        elif event_type == "signal_advanced":
-            data.setdefault("time", request.headers.get("X-Time") or "")
-            store_signal(data, advanced=True)
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        app.logger.error(f"Error: {e}")
-        return jsonify({"status": "error", "detail": str(e)}), 500
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Autonomous Trade Forecast System</title>
+  <meta http-equiv="refresh" content="60">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    button { margin: 5px; padding: 10px 15px; font-size: 16px; }
+    img { margin-top: 20px; max-width: 90%; border: 1px solid #ccc; }
+  </style>
+  <script>
+    function changeChart(tf) {
+      const img = document.getElementById("chart");
+      img.src = "/plot?ticker=GBPUSD&timeframe=" + tf + "&_=" + new Date().getTime();
+    }
+  </script>
+</head>
+<body>
+  <h1>📈 Autonomous Trade Forecast System</h1>
+  <div>
+    <button onclick="changeChart('5S')">5S</button>
+    <button onclick="changeChart('15S')">15S</button>
+    <button onclick="changeChart('30S')">30S</button>
+    <button onclick="changeChart('45S')">45S</button>
+    <button onclick="changeChart('1')">1m</button>
+    <button onclick="changeChart('2')">2m</button>
+    <button onclick="changeChart('5')">5m</button>
+    <button onclick="changeChart('10')">10m</button>
+    <button onclick="changeChart('15')">15m</button>
+    <button onclick="changeChart('30')">30m</button>
+    <button onclick="changeChart('45')">45m</button>
+  </div>
+  <img id="chart" src="/plot?ticker=GBPUSD&timeframe=15S" alt="Loading chart...">
+</body>
+</html>
