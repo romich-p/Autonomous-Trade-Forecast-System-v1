@@ -12,10 +12,8 @@ def index():
 def plot():
     ticker = request.args.get("ticker", "GBPUSD")
     timeframe = request.args.get("timeframe", "15S")
-    path_or_response = plot_chart(ticker, timeframe)
-    if path_or_response is None:
-        return f"No data for {ticker} {timeframe}", 404
-    return path_or_response
+    result = plot_chart(ticker, timeframe)
+    return result  # Это уже готовый Response (png или текст)
 
 @app.route('/webhook', methods=["POST"])
 def webhook():
