@@ -1,46 +1,77 @@
 import pandas as pd
-from core.data_store import candles, signals, advanced_signals
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+from flask import Response
+import io
+from .data_store import candles, signals, advanced_signals
+from .analyzer import analyze_market
 
-
-def analyze_market(ticker: str, timeframe: str):
+def plot_chart(ticker: str, timeframe: str):
     key = f"{ticker}_{timeframe}"
-    df = candles.get(key, [])
-    if not df or len(df) < 20:
-        return None  # Недостаточно данных
+    raw = candles.get(key, [])
+    if not raw:
+        return f"No data for {ticker} {timeframe}"
 
-    df = pd.DataFrame(df)
+    df = pd.DataFrame(raw)
     df["time"] = pd.to_datetime(df["time"])
     df.set_index("time", inplace=True)
 
-    df["ma_fast"] = df["close"].rolling(5).mean()
-    df["ma_slow"] = df["close"].rolling(15).mean()
+    fig, ax = plt.subplots(figsize=(12, 6))
 
-    trend_direction = "up" if df["ma_fast"].iloc[-1] > df["ma_slow"].iloc[-1] else "down"
-    trend_strength = abs(df["ma_fast"].iloc[-1] - df["ma_slow"].iloc[-1])
+    # Свечи
+    for idx, row in df.iterrows():
+        color = 'green' if row['close'] >= row['open'] else 'red'
+        ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тени
+        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
 
-    # Найдём последний сигнал
-    last_signal = next((s for s in reversed(signals.get((ticker, timeframe), [])) if s["time"] in df.index), None)
-    last_adv_signal = next((s for s in reversed(advanced_signals.get((ticker, timeframe), [])) if s["time"] in df.index), None)
+    # Простые сигналы
+    for s in signals.get((ticker, timeframe), []):
+        t = pd.to_datetime(s["time"])
+        label = s["action"]
+        color = "blue" if label == "buy" else "orange"
+        ax.axvline(t, color=color, linestyle="--", alpha=0.5)
+        ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
-    # Оптимальность входа по последнему сигналу
-    entry_optimality = None
-    side = None
-    if last_signal:
-        sig_time = pd.to_datetime(last_signal["time"])
-        sig_dir = last_signal["action"]
-        side = "with trend" if (sig_dir == "buy" and trend_direction == "up") or (sig_dir == "sell" and trend_direction == "down") else "against trend"
-        entry_optimality = 100 if side == "with trend" else 40
-    elif last_adv_signal:
-        sig_time = pd.to_datetime(last_adv_signal["time"])
-        side_value = last_adv_signal.get("side")
-        if side_value in ["long", "short"]:
-            sig_dir = "buy" if side_value == "long" else "sell"
-            side = "with trend" if (sig_dir == "buy" and trend_direction == "up") or (sig_dir == "sell" and trend_direction == "down") else "against trend"
-            entry_optimality = 90 if side == "with trend" else 50
+    # Advanced сигналы
+    for s in advanced_signals.get((ticker, timeframe), []):
+        t = pd.to_datetime(s["time"])
+        if s["action"] == "tp_sl":
+            side = s.get("side", "flat")
+            if side == "flat":
+                label = "TP/SL: flat"
+            elif side == "long":
+                label = "T.LONG"
+            elif side == "short":
+                label = "T.SHORT"
+            else:
+                label = f"TP/SL: {side}"
+            ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
+            ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
 
-    return {
-        "trend_direction": trend_direction,
-        "trend_strength": round(trend_strength, 5),
-        "entry_optimality": entry_optimality,
-        "entry_side": side
-    }
+    # Прогноз
+    analysis = analyze_market(ticker, timeframe)
+    if analysis:
+        text = (
+            f"Trend: {analysis['trend_direction']}\n"
+            f"Strength: {analysis['trend_strength']}\n"
+            f"Entry: {analysis['entry_side']} ({analysis['entry_optimality']}%)"
+        )
+        ax.text(
+            1.01, 0.99, text,
+            transform=ax.transAxes,
+            verticalalignment='top',
+            fontsize=10,
+            bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+        )
+
+    ax.set_title(f"{ticker} {timeframe} Chart")
+    ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    plt.close(fig)
+
+    return Response(buf.getvalue(), mimetype='image/png')
