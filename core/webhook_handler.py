@@ -1,35 +1,39 @@
 from core.data_store import store_candle, store_signal, store_advanced
 
 def handle_webhook(data):
-    """
-    Обрабатывает входящие данные от TradingView через вебхук.
-    """
-    if "type" not in data or "ticker" not in data or "timeframe" not in data:
-        return "Invalid payload", 400
+    print("[WEBHOOK] Incoming:", data)
 
-    event_type = data["type"]
-    ticker = data["ticker"]
-    timeframe = data["timeframe"]
+    data_type = data.get("type")
+    ticker = data.get("ticker")
+    timeframe = data.get("timeframe")
 
-    if event_type == "candle":
+    if data_type == "candle":
         candle = data.get("candle")
-        if not candle:
-            return "Missing candle data", 400
-        store_candle(ticker, timeframe, candle)
-
-    elif event_type == "signal":
+        if ticker and timeframe and candle:
+            print(f"[STORE] Saving candle for {ticker}_{timeframe}: {candle}")
+            store_candle(ticker, timeframe, candle)
+        else:
+            print("[ERROR] Candle payload missing required fields.")
+    elif data_type == "signal":
         signal = data.get("signal")
-        if not signal:
-            return "Missing signal data", 400
-        store_signal(ticker, timeframe, signal)
-
-    elif event_type == "advanced":
-        adv_signal = data.get("signal")
-        if not adv_signal:
-            return "Missing advanced signal", 400
-        store_advanced(ticker, timeframe, adv_signal)
-
+        if ticker and timeframe and signal:
+            print(f"[STORE] Saving signal for {ticker}_{timeframe}: {signal}")
+            store_signal(ticker, timeframe, signal)
+        else:
+            print("[ERROR] Signal payload missing required fields.")
+    elif data_type == "tp_sl":
+        signal = data.get("signal")
+        if ticker and timeframe and signal:
+            print(f"[STORE] Saving TP/SL signal for {ticker}_{timeframe}: {signal}")
+            store_signal(ticker, timeframe, signal)
+        else:
+            print("[ERROR] TP/SL payload missing required fields.")
+    elif data_type == "advanced":
+        adv = data.get("adv")
+        if ticker and timeframe and adv:
+            print(f"[STORE] Saving advanced metrics for {ticker}_{timeframe}: {adv}")
+            store_advanced(ticker, timeframe, adv)
+        else:
+            print("[ERROR] Advanced payload missing required fields.")
     else:
-        return "Unknown type", 400
-
-    return "OK", 200
+        print("[ERROR] Unknown webhook type:", data_type)
