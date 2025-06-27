@@ -1,79 +1,105 @@
 import os
+import datetime
+import json
 from tinydb import TinyDB, Query
 from tinydb.storages import JSONStorage
 from tinydb.middlewares import CachingMiddleware
-from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "../data/db.json")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Путь к файлу БД (всегда внутри /data/db.json)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "../data")
+os.makedirs(DATA_DIR, exist_ok=True)
 
+DB_PATH = os.path.join(DATA_DIR, "db.json")
 db = TinyDB(DB_PATH, storage=CachingMiddleware(JSONStorage))
-candles_table = db.table("candles")
-signals_table = db.table("signals")
-adv_signals_table = db.table("advanced_signals")
 
+# Глобальные переменные (в памяти)
 candles = {}
 signals = {}
 advanced_signals = {}
 
-def load_all():
+# === Загрузка при запуске ===
+def load_data_from_db():
     global candles, signals, advanced_signals
 
     candles.clear()
     signals.clear()
     advanced_signals.clear()
 
-    for row in candles_table.all():
-        key = (row["ticker"], row["timeframe"])
-        candles.setdefault(key, []).append(row["data"])
+    db_data = db.all()
+    for item in db_data:
+        if item.get("type") == "candle":
+            key = f"{item['ticker']}_{item['timeframe']}"
+            candles.setdefault(key, []).append(item["data"])
+        elif item.get("type") == "signal":
+            key = f"{item['ticker']}_{item['timeframe']}"
+            signals.setdefault(key, []).append(item["data"])
+        elif item.get("type") == "signal_advanced":
+            key = f"{item['ticker']}_{item['timeframe']}"
+            advanced_signals.setdefault(key, []).append(item["data"])
 
-    for row in signals_table.all():
-        key = (row["ticker"], row["timeframe"])
-        signals.setdefault(key, []).append(row["data"])
+    # Отсортировать по времени
+    for dataset in [candles, signals, advanced_signals]:
+        for k in dataset:
+            dataset[k].sort(key=lambda x: x["time"])
 
-    for row in adv_signals_table.all():
-        key = (row["ticker"], row["timeframe"])
-        advanced_signals.setdefault(key, []).append(row["data"])
+    print(f"[DB] Загружено: {len(candles)} свечей, {len(signals)} сигналов, {len(advanced_signals)} advanced")
 
-load_all()
-
+# === Сохраняем свечу ===
 def store_candle(data):
-    key = (data["ticker"], data["timeframe"])
-    if key not in candles:
-        candles[key] = []
+    key = f"{data['ticker']}_{data['timeframe']}"
+    candles.setdefault(key, [])
 
-    if any(c["time"] == data["time"] for c in candles[key]):
-        return
+    if any(c['time'] == data['time'] for c in candles[key]):
+        return  # дубликат
 
-    entry = {
+    record = {
         "time": data["time"],
         "open": float(data["open"]),
         "high": float(data["high"]),
         "low": float(data["low"]),
         "close": float(data["close"]),
-        "volume": float(data.get("volume", 0)),
+        "volume": float(data.get("volume", 0))
     }
 
-    candles[key].append(entry)
+    candles[key].append(record)
     candles[key].sort(key=lambda x: x["time"])
-    candles_table.insert({"ticker": data["ticker"], "timeframe": data["timeframe"], "data": entry})
 
+    db.insert({
+        "type": "candle",
+        "ticker": data["ticker"],
+        "timeframe": data["timeframe"],
+        "data": record
+    })
+
+# === Сохраняем сигнал ===
 def store_signal(data, advanced=False):
-    key = (data["ticker"], data["timeframe"])
+    key = f"{data['ticker']}_{data['timeframe']}"
     target = advanced_signals if advanced else signals
-    table = adv_signals_table if advanced else signals_table
+    target.setdefault(key, [])
 
-    entry = {
-        "time": data["time"],
+    record = {
+        "time": data.get("time", datetime.datetime.utcnow().isoformat()),
         "action": data["action"]
     }
 
     if advanced:
-        entry["sltp"] = float(data.get("sltp", 0))
-        entry["side"] = data.get("side", "flat")
+        record["side"] = data.get("side", "flat")
+        record["sltp"] = float(data.get("sltp", 0))
     else:
-        entry["contracts"] = float(data.get("contracts", 0))
-        entry["position_size"] = float(data.get("position_size", 0))
+        record["contracts"] = float(data.get("contracts", 0))
+        record["position_size"] = float(data.get("position_size", 0))
 
-    target.setdefault(key, []).append(entry)
-    table.insert({"ticker": data["ticker"], "timeframe": data["timeframe"], "data": entry})
+    target[key].append(record)
+    target[key].sort(key=lambda x: x["time"])
+
+    db.insert({
+        "type": "signal_advanced" if advanced else "signal",
+        "ticker": data["ticker"],
+        "timeframe": data["timeframe"],
+        "data": record
+    })
+
+
+# === Вызываем при старте ===
+load_data_from_db()
