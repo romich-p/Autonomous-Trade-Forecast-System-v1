@@ -32,6 +32,7 @@ def webhook():
             data.setdefault("time", request.headers.get("X-Time") or "")
             store_signal(data, advanced=False)
         elif event_type == "signal_advanced":
+            data.setdefault("time", request.headers.get("X-Time") or "")
             store_signal(data, advanced=True)
         return jsonify({"status": "ok"})
     except Exception as e:
