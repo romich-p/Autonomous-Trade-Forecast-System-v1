@@ -1,73 +1,42 @@
-import pandas as pd
+import os
 import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-from flask import Response
-import io
-from .data_store import candles, signals, advanced_signals
-from .analyze_plotter import analyze_trend_and_entry
+import pandas as pd
 
+from core.data_store import candles
+from core.analyze_plotter import analyze_trend_and_entry
 
 def plot_chart(ticker: str, timeframe: str):
     key = f"{ticker}_{timeframe}"
-    df_data = candles.get(key, [])
+    df = candles.get(key, [])
+    if not df or len(df) < 2:
+        return None
 
-    print(f"[PLOT] Candles for {key}: {len(df_data)} entries")  # Отладка
-
-    if not df_data:
-        print(f"[PLOT] No candles found for {key}")
-        return Response("No candle data", status=404)
-
-    df = pd.DataFrame(df_data)
+    df = pd.DataFrame(df)
     df["time"] = pd.to_datetime(df["time"])
     df.set_index("time", inplace=True)
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    # Анализ
+    analysis = analyze_trend_and_entry(ticker, timeframe)
+    trend_str = f"Trend: {analysis['trend_direction']} ({analysis['trend_strength']})" if analysis else ""
+    entry_str = f"Entry: {analysis['entry_side']} ({analysis['entry_optimality']}%)" if analysis and analysis["entry_optimality"] is not None else ""
 
-    for idx, row in df.iterrows():
-        color = 'green' if row['close'] >= row['open'] else 'red'
-        ax.plot([idx, idx], [row['low'], row['high']], color='black')
-        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)
+    # Построение графика
+    fig, ax = plt.subplots(figsize=(10, 4))
+    df["close"].plot(ax=ax, label="Close", linewidth=1)
 
-    sigs = signals.get(key, [])
-    for s in sigs:
-        t = pd.to_datetime(s["time"])
-        label = s["action"]
-        color = "blue" if label == "buy" else "orange"
-        ax.axvline(t, color=color, linestyle="--", alpha=0.5)
-        ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
+    if "ma_fast" in df.columns:
+        df["ma_fast"].plot(ax=ax, label="MA Fast", linestyle="--")
+    if "ma_slow" in df.columns:
+        df["ma_slow"].plot(ax=ax, label="MA Slow", linestyle="--")
 
-    adv = advanced_signals.get(key, [])
-    for s in adv:
-        t = pd.to_datetime(s["time"])
-        if s["action"] == "tp_sl":
-            side = s.get("side", "flat")
-            if side == "long":
-                label = "T.LONG"
-            elif side == "short":
-                label = "T.SHORT"
-            else:
-                label = "TP/SL: flat"
-            ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
-            ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
+    ax.set_title(f"{ticker} {timeframe}\n{trend_str} | {entry_str}")
+    ax.legend()
+    ax.grid(True)
 
-    # Добавляем анализ
-    try:
-        trend_summary = analyze_trend_and_entry(df, adv)
-        ax.text(0.01, 0.95, trend_summary, transform=ax.transAxes,
-                fontsize=10, verticalalignment='top',
-                bbox=dict(boxstyle="round", facecolor="white", alpha=0.6))
-    except Exception as e:
-        print(f"[PLOT] Analyze error: {e}")
+    # Сохранение
+    os.makedirs("static", exist_ok=True)
+    image_path = f"static/{ticker}_{timeframe}.png"
+    plt.savefig(image_path)
+    plt.close()
 
-    ax.set_title(f"{ticker} {timeframe} Chart")
-    ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plt.close(fig)
-
-    print(f"[PLOT] Chart rendered for {key}")
-    return Response(buf.getvalue(), mimetype='image/png')
+    return image_path
