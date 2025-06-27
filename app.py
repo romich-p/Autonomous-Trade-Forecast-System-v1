@@ -1,34 +1,43 @@
-from flask import Flask, request, send_file, render_template
+from flask import Flask, request, jsonify, send_file
 from core.webhook_handler import handle_webhook
-from core.plotter import plot_chart
-from core.data_store import load_database
+from core.data_store import get_data_by_pair_and_tf
+from visualize import visualize_plot
+import os
 
 app = Flask(__name__)
 
-# Загружаем базу при старте
-load_database()
-
-@app.route("/", methods=["GET"])
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return send_file('static/index.html')
 
-@app.route("/webhook", methods=["POST"])
+@app.route('/plot')
+def plot():
+    ticker = request.args.get('ticker')
+    timeframe = request.args.get('timeframe')
+    key = f"{ticker}_{timeframe}"
+    print(f"[PLOT] Requested: {key}")
+
+    candles, signals, advanced = get_data_by_pair_and_tf(ticker, timeframe)
+    if not candles:
+        print(f"[PLOT] No data for {key}")
+        return jsonify({"status": "error", "message": "No data"}), 404
+
+    filepath = visualize_plot(ticker, timeframe, candles, signals, advanced)
+    return send_file(filepath, mimetype='image/png')
+
+@app.route('/webhook', methods=['POST'])
 def webhook():
     try:
-        data = request.json
-        handle_webhook(data)
-        return {"status": "ok"}
+        payload = request.get_json(force=True)
+        print(f"[WEBHOOK] Raw payload: {payload}")
+        if payload:
+            print(f"[WEBHOOK] Keys: {list(payload.keys())}")
+        handle_webhook(payload)
+        return jsonify({'status': 'ok'})
     except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
+        print("[ERROR in /webhook]:", e)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route("/plot", methods=["GET"])
-def plot():
-    ticker = request.args.get("ticker")
-    timeframe = request.args.get("timeframe")
-    image_path = plot_chart(ticker, timeframe)
-    if image_path and os.path.exists(image_path):
-        return send_file(image_path, mimetype='image/png')
-    return {"status": "error", "message": "No data"}, 404
-
-if __name__ == "__main__":
-    app.run(debug=False, port=10000, host="0.0.0.0")
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
