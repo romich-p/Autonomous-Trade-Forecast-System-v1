@@ -1,30 +1,38 @@
-# core/data_store.py
+import os
 import datetime
 from tinydb import TinyDB, Query
-import os
 
-# Исключённые таймфреймы
-EXCLUDED_TIMEFRAMES = {"5S", "45S", "10M"}
-
-# Пути к БД
+# === Пути и инициализация базы ===
 DB_PATH = os.path.join(os.path.dirname(__file__), "../data/db.json")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # создаём директорию, если не существует
 db = TinyDB(DB_PATH)
 
+# === Ключи для хранения в TinyDB ===
+CANDLES_TABLE = "candles"
+SIGNALS_TABLE = "signals"
+ADV_SIGNALS_TABLE = "advanced_signals"
+
+# === Поддерживаемые таймфреймы ===
+SKIP_TIMEFRAMES = {"5S", "45S", "10m"}
+
+
+def _tf_key(ticker, timeframe):
+    return f"{ticker}_{timeframe}"
+
+
+# === Хранилище в памяти ===
+candles = {}
+signals = {}
+advanced_signals = {}
+
+# === Функция: Сохраняем свечу ===
 def store_candle(data):
-    if data["timeframe"] in EXCLUDED_TIMEFRAMES:
+    tf = data["timeframe"]
+    if tf in SKIP_TIMEFRAMES:
         return
 
-    key = f"{data['ticker']}_{data['timeframe']}"
-    table = db.table("candles")
-
-    # Проверка на дубликат
-    Candle = Query()
-    exists = table.get((Candle.key == key) & (Candle.time == data["time"]))
-    if exists:
-        return
-
-    item = {
-        "key": key,
+    key = _tf_key(data["ticker"], tf)
+    entry = {
         "time": data["time"],
         "open": float(data["open"]),
         "high": float(data["high"]),
@@ -32,49 +40,71 @@ def store_candle(data):
         "close": float(data["close"]),
         "volume": float(data.get("volume", 0))
     }
-    table.insert(item)
 
+    # В память
+    candles.setdefault(key, [])
+    if any(c["time"] == entry["time"] for c in candles[key]):
+        return
+    candles[key].append(entry)
+    candles[key].sort(key=lambda x: x["time"])
+
+    # В базу
+    db.table(CANDLES_TABLE).insert({**entry, "key": key})
+
+
+# === Функция: Получаем последние N свечей ===
+def get_recent_candles(ticker_tf, n=100):
+    return candles.get(ticker_tf, [])[-n:]
+
+
+# === Функция: Сохраняем сигнал ===
 def store_signal(data, advanced=False):
-    if data["timeframe"] in EXCLUDED_TIMEFRAMES:
+    tf = data["timeframe"]
+    if tf in SKIP_TIMEFRAMES:
         return
 
-    table = db.table("advanced_signals" if advanced else "signals")
-    entry = {
+    key = _tf_key(data["ticker"], tf)
+    time = data.get("time", datetime.datetime.utcnow().isoformat())
+    record = {
         "ticker": data["ticker"],
-        "timeframe": data["timeframe"],
-        "time": data.get("time", datetime.datetime.utcnow().isoformat()),
-        "action": data["action"]
+        "timeframe": tf,
+        "time": time,
+        "action": data["action"],
     }
 
     if advanced:
-        entry["side"] = data.get("side", "flat")
-        entry["sltp"] = float(data.get("sltp", 0))
+        record["sltp"] = float(data.get("sltp", 0))
+        record["side"] = data.get("side", "flat")
+        advanced_signals.setdefault(key, []).append(record)
+        db.table(ADV_SIGNALS_TABLE).insert({**record, "key": key})
     else:
-        entry["contracts"] = float(data.get("contracts", 0))
-        entry["position_size"] = float(data.get("position_size", 0))
+        record["contracts"] = float(data.get("contracts", 0))
+        record["position_size"] = float(data.get("position_size", 0))
+        signals.setdefault(key, []).append(record)
+        db.table(SIGNALS_TABLE).insert({**record, "key": key})
 
-    table.insert(entry)
 
-def load_all():
-    candles = {}
-    for row in db.table("candles").all():
+# === Функция: Загрузка из базы при старте ===
+def load_from_db():
+    for row in db.table(CANDLES_TABLE).all():
         key = row["key"]
-        if key not in candles:
-            candles[key] = []
-        candles[key].append(row)
+        candles.setdefault(key, []).append({
+            "time": row["time"],
+            "open": row["open"],
+            "high": row["high"],
+            "low": row["low"],
+            "close": row["close"],
+            "volume": row.get("volume", 0),
+        })
 
-    signals = {}
-    for row in db.table("signals").all():
-        key = f"{row['ticker']}_{row['timeframe']}"
-        if key not in signals:
-            signals[key] = []
-        signals[key].append(row)
+    for row in db.table(SIGNALS_TABLE).all():
+        key = _tf_key(row["ticker"], row["timeframe"])
+        signals.setdefault(key, []).append(row)
 
-    advanced_signals = {}
-    for row in db.table("advanced_signals").all():
-        key = f"{row['ticker']}_{row['timeframe']}"
-        if key not in advanced_signals:
-            advanced_signals[key] = []
-        advanced_signals[key].append(row)
+    for row in db.table(ADV_SIGNALS_TABLE).all():
+        key = _tf_key(row["ticker"], row["timeframe"])
+        advanced_signals.setdefault(key, []).append(row)
 
-    return candles, signals, advanced_signals
+
+# Загружаем при старте
+load_from_db()
