@@ -4,7 +4,7 @@ from matplotlib.dates import DateFormatter
 from flask import Response
 import io
 from .data_store import candles, signals, advanced_signals
-from .analyze_plotter import analyze_trend_and_entry
+from .analyzer import analyze_market
 
 def plot_chart(ticker: str, timeframe: str):
     key = f"{ticker}_{timeframe}"
@@ -26,7 +26,7 @@ def plot_chart(ticker: str, timeframe: str):
         ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
 
     # Простые сигналы
-    sigs = signals.get(key, [])
+    sigs = signals.get((ticker, timeframe), [])
     for s in sigs:
         t = pd.to_datetime(s["time"])
         label = s["action"]
@@ -35,7 +35,7 @@ def plot_chart(ticker: str, timeframe: str):
         ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
     # Расширенные сигналы
-    adv = advanced_signals.get(key, [])
+    adv = advanced_signals.get((ticker, timeframe), [])
     for s in adv:
         t = pd.to_datetime(s["time"])
         if s["action"] == "tp_sl":
@@ -49,11 +49,17 @@ def plot_chart(ticker: str, timeframe: str):
             ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
             ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
 
-    # Анализ тренда и точки входа
-    trend_summary = analyze_trend_and_entry(df, adv)
-    ax.text(0.01, 0.95, trend_summary, transform=ax.transAxes,
-            fontsize=10, verticalalignment='top',
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.6))
+    # Анализ тренда
+    analysis = analyze_market(ticker, timeframe)
+    if analysis:
+        text = (
+            f"Trend: {analysis['trend_direction']}\n"
+            f"Strength: {analysis['trend_strength']}\n"
+            f"Entry: {analysis['entry_side']} ({analysis['entry_optimality']}%)"
+        )
+        ax.text(0.01, 0.95, text, transform=ax.transAxes,
+                fontsize=10, verticalalignment='top',
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.6))
 
     ax.set_title(f"{ticker} {timeframe} Chart")
     ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
