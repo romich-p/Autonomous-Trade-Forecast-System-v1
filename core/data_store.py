@@ -1,70 +1,48 @@
+# core/data_store.py
 import json
 import os
 from collections import defaultdict
-from tinydb import TinyDB
 
-DB_PATH = "db.json"
-
-# Используем TinyDB для сохранения
-db = TinyDB(DB_PATH)
-
-# Основные структуры для хранения данных в памяти
+DB_FILE = "db.json"
 candles = defaultdict(list)
 signals = defaultdict(list)
 advanced_signals = defaultdict(list)
 
-def load_data():
-    if not os.path.exists(DB_PATH):
+def save_db():
+    data = {
+        "candles": candles,
+        "signals": signals,
+        "advanced_signals": advanced_signals
+    }
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            data = json.load(f)
+            candles.update({k: v for k, v in data.get("candles", {}).items()})
+            signals.update({k: v for k, v in data.get("signals", {}).items()})
+            advanced_signals.update({k: v for k, v in data.get("advanced_signals", {}).items()})
+            print(f"[DB] Загружено: {sum(len(v) for v in candles.values())} свечей, {sum(len(v) for v in signals.values())} сигналов, {sum(len(v) for v in advanced_signals.values())} advanced")
+    else:
         print("[DB] db.json не найден, создаём новый файл")
-        return
-
-    data = db.all()
-    loaded_candles = 0
-    loaded_signals = 0
-    loaded_advanced = 0
-
-    for entry in data:
-        if entry.get("type") == "candle":
-            key = f"{entry['ticker']}_{entry['timeframe']}".upper()
-            candles[key].append(entry["data"])
-            loaded_candles += 1
-        elif entry.get("type") == "signal":
-            key = f"{entry['ticker']}_{entry['timeframe']}".upper()
-            signals[key].append(entry["data"])
-            loaded_signals += 1
-        elif entry.get("type") == "advanced":
-            key = f"{entry['ticker']}_{entry['timeframe']}".upper()
-            advanced_signals[key].append(entry["data"])
-            loaded_advanced += 1
-
-    print(f"[DB] Загружено: {loaded_candles} свечей, {loaded_signals} сигналов, {loaded_advanced} advanced")
+        save_db()
 
 def store_candle(ticker, timeframe, candle):
     key = f"{ticker}_{timeframe}".upper()
+    print(f"[STORE_CANDLE] {key} → {candle}")
     candles[key].append(candle)
-    db.insert({
-        "type": "candle",
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "data": candle
-    })
+    save_db()
 
 def store_signal(ticker, timeframe, signal):
     key = f"{ticker}_{timeframe}".upper()
+    print(f"[STORE_SIGNAL] {key} → {signal}")
     signals[key].append(signal)
-    db.insert({
-        "type": "signal",
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "data": signal
-    })
+    save_db()
 
-def store_advanced(ticker, timeframe, advanced):
+def store_advanced(ticker, timeframe, adv):
     key = f"{ticker}_{timeframe}".upper()
-    advanced_signals[key].append(advanced)
-    db.insert({
-        "type": "advanced",
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "data": advanced
-    })
+    print(f"[STORE_ADVANCED] {key} → {adv}")
+    advanced_signals[key].append(adv)
+    save_db()
