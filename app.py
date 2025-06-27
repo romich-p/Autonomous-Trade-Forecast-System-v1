@@ -13,10 +13,11 @@ def plot():
     ticker = request.args.get("ticker", "GBPUSD")
     timeframe = request.args.get("timeframe", "15S")
     path = plot_chart(ticker, timeframe)
-    if path:
-        return send_file(path, mimetype="image/png")
-    else:
+
+    if not path or not isinstance(path, str) or not path.endswith(".png"):
         return f"No data for {ticker} {timeframe}", 404
+
+    return send_file(path, mimetype="image/png")
 
 @app.route('/webhook', methods=["POST"])
 def webhook():
