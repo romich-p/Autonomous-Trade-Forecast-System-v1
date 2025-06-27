@@ -9,7 +9,7 @@ def plot_chart(ticker: str, timeframe: str):
     key = f"{ticker}_{timeframe}"
     df = candles.get(key, [])
     if not df:
-        return None
+        return f"No data for {ticker} {timeframe}"
 
     # Преобразуем в DataFrame
     df = pd.DataFrame(df)
@@ -17,14 +17,14 @@ def plot_chart(ticker: str, timeframe: str):
     df.set_index("time", inplace=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
-
+    
     # Отображаем свечи
     for idx, row in df.iterrows():
         color = 'green' if row['close'] >= row['open'] else 'red'
         ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тень
         ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
 
-    # Добавим сигналы
+    # Простые сигналы (от crossover)
     sigs = signals.get(key, [])
     for s in sigs:
         t = pd.to_datetime(s["time"])
@@ -33,15 +33,26 @@ def plot_chart(ticker: str, timeframe: str):
         ax.axvline(t, color=color, linestyle="--", alpha=0.5)
         ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
-    # Advanced сигналы
+    # Advanced сигналы (от тех. индикатора)
     adv = advanced_signals.get(key, [])
     for s in adv:
         t = pd.to_datetime(s["time"])
         if s["action"] == "tp_sl":
-            side = s.get("side", "flat")
-            label = f"TP/SL: {side}"
-            ax.axvline(t, color="purple", linestyle=":", alpha=0.5)
-            ax.text(t, ax.get_ylim()[0], label, rotation=90, color="purple", verticalalignment='bottom')
+            side = s.get("side", "flat").lower()
+            if side == "flat":
+                label = "TP/SL"
+                color = "purple"
+            elif side == "long":
+                label = "T.LONG"
+                color = "green"
+            elif side == "short":
+                label = "T.SHORT"
+                color = "red"
+            else:
+                continue  # игнорируем неизвестное
+
+            ax.axvline(t, color=color, linestyle=":", alpha=0.6)
+            ax.text(t, ax.get_ylim()[0], label, rotation=90, color=color, verticalalignment='bottom')
 
     ax.set_title(f"{ticker} {timeframe} Chart")
     ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
