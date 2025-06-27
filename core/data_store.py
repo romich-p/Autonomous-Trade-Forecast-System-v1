@@ -1,77 +1,66 @@
-import os
 import json
+from collections import defaultdict
 from datetime import datetime
 
-# Хранилище данных
-candles = {}  # структура: {"GBPUSD": {"15S": [ ... ]}}
-signals = []
+# Хранилища
+candles = defaultdict(list)
+signals = defaultdict(list)
 
-def parse_time(t):
-    return datetime.fromisoformat(t.replace("Z", "+00:00"))
-
-def store_candle(data):
-    symbol = data["ticker"]
-    tf = data["timeframe"]
-    ts = parse_time(data["time"])
-
-    if symbol not in candles:
-        candles[symbol] = {}
-    if tf not in candles[symbol]:
-        candles[symbol][tf] = []
-
-    new_candle = {
-        "time": ts,
-        "open": float(data["open"]),
-        "high": float(data["high"]),
-        "low": float(data["low"]),
-        "close": float(data["close"]),
-    }
-
-    # Удаляем дубликаты и сортируем по времени
-    existing = candles[symbol][tf]
-    candles[symbol][tf] = sorted(
-        [c for c in existing if c["time"] != ts] + [new_candle],
-        key=lambda x: x["time"]
-    )
 
 def normalize_action(data):
     action = data.get("action")
     sltp = float(data.get("sltp", 0))
     side = data.get("side", "flat")
 
-    # Обработка TP/SL при входящем действии buy/sell
-    if action in ("buy", "sell") and sltp == 0 and side == "flat":
-        return "tp_sl"
+    if action == "tp_sl":
+        if sltp != 0 and side in ("long", "short"):
+            return side  # вход в позицию
+        elif sltp == 0 and side == "flat":
+            return "tp_sl"  # выход из позиции
     return action
 
-def store_signal(data, advanced=False):
-    symbol = data["ticker"]
-    tf = data["timeframe"]
-    ts = parse_time(data["time"])
 
-    signal = {
-        "symbol": symbol,
-        "timeframe": tf,
-        "time": ts,
-        "advanced": advanced
+def store_candle(data):
+    key = (data["ticker"], data["timeframe"])
+    timestamp = data["time"]
+
+    # Удаление дубликатов по времени
+    if any(candle["time"] == timestamp for candle in candles[key]):
+        return
+
+    candle = {
+        "time": timestamp,
+        "open": float(data["open"]),
+        "high": float(data["high"]),
+        "low": float(data["low"]),
+        "close": float(data["close"]),
     }
+    candles[key].append(candle)
+    candles[key] = sorted(candles[key], key=lambda x: x["time"])  # сортировка по времени
+
+
+def store_signal(data, advanced=False):
+    key = (data["ticker"], data["timeframe"])
 
     if advanced:
-        signal.update({
-            "action": normalize_action(data),
+        action = normalize_action(data)
+        signal = {
+            "time": data["time"],
+            "action": action,
             "sltp": float(data.get("sltp", 0)),
             "side": data.get("side", "flat")
-        })
+        }
     else:
-        signal.update({
-            "action": data.get("action"),
-            "contracts": float(data.get("contracts", 0)),
-            "position_size": float(data.get("position_size", 0))
-        })
+        signal = {
+            "time": data["time"],
+            "action": data["action"],
+            "contracts": data.get("contracts"),
+            "position_size": data.get("position_size"),
+        }
 
-    signals.append(signal)
+    signals[key].append(signal)
+    signals[key] = sorted(signals[key], key=lambda x: x["time"])  # сортировка
 
-def get_recent_candles(symbol, tf, lookback=100):
-    if symbol in candles and tf in candles[symbol]:
-        return candles[symbol][tf][-lookback:]
-    return []
+
+def get_recent_candles(ticker, timeframe, limit=50):
+    return candles[(ticker, timeframe)][-limit:]
