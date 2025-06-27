@@ -4,6 +4,8 @@ from matplotlib.dates import DateFormatter
 from flask import Response
 import io
 from .data_store import candles, signals, advanced_signals
+from .analyze_plotter import analyze_market
+
 
 def plot_chart(ticker: str, timeframe: str):
     key = f"{ticker}_{timeframe}"
