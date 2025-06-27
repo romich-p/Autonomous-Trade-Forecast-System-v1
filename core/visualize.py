@@ -1,38 +1,46 @@
+import matplotlib.pyplot as plt
 import io
 import base64
-import matplotlib.pyplot as plt
+from datetime import datetime
 from analyzer import analyze_candles
 
-def visualize_plot(ticker, timeframe, candles, signals, advanced):
+
+def visualize_plot(ticker, timeframe, candles, signals, advanced_signals):
     if not candles:
-        return {"status": "error", "message": "No candle data"}
+        return None
 
-    times = [c["timestamp"] for c in candles]
-    prices = [c["close"] for c in candles]
+    fig, ax = plt.subplots(figsize=(12, 6))
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(times, prices, label="Close", linewidth=1.5)
+    times = [datetime.fromtimestamp(c["time"]) for c in candles]
+    closes = [c["close"] for c in candles]
 
-    for sig in signals:
-        ts = sig["timestamp"]
-        side = sig.get("side", "")
-        if side == "long":
-            plt.axvline(x=ts, color="green", linestyle="--", alpha=0.5)
-        elif side == "short":
-            plt.axvline(x=ts, color="red", linestyle="--", alpha=0.5)
-        elif side == "flat":
-            plt.axvline(x=ts, color="gray", linestyle="--", alpha=0.3)
+    ax.plot(times, closes, label="Close", linewidth=1.5)
 
-    analysis = analyze_candles(ticker, timeframe, candles, signals, advanced)
-    label = f"{ticker} {timeframe} — Trend: {analysis['trend']}, Entry: {analysis['entry']}%, Prob: {analysis['probability']}%"
-    plt.title(label)
-    plt.legend()
-    plt.tight_layout()
+    for signal in signals:
+        t = datetime.fromtimestamp(signal["time"])
+        if signal["type"] == "sma_crossover":
+            ax.axvline(t, color="blue", linestyle="--", alpha=0.4)
+            ax.text(t, max(closes), "SMA", rotation=90, color="blue", fontsize=8, ha='right')
+        elif signal["type"] == "tp_sl":
+            label = f"T.{signal['side'].upper()}" if signal.get("side") != "flat" else "EXIT"
+            ax.axvline(t, color="green" if signal["side"] == "long" else "red", linestyle=":", alpha=0.6)
+            ax.text(t, min(closes), label, rotation=90, color="green" if signal["side"] == "long" else "red",
+                    fontsize=8, ha='left')
 
+    analysis = analyze_candles(ticker, timeframe, candles, signals, advanced_signals)
+    summary = (
+        f"Trend: {analysis['trend']} ({analysis['trend_strength']}%)\n"
+        f"Optimality: {analysis['entry_optimality']}%\n"
+        f"Side: {analysis['entry_side']}"
+    )
+    ax.set_title(f"{ticker} {timeframe}\n{summary}")
+    ax.legend()
+    ax.grid(True)
+
+    # Преобразование в base64
     buf = io.BytesIO()
     plt.savefig(buf, format="png")
-    plt.close()
+    plt.close(fig)
     buf.seek(0)
-
-    image_base64 = base64.b64encode(buf.read()).decode("utf-8")
-    return {"status": "ok", "image": image_base64}
+    img_base64 = base64.b64encode(buf.read()).decode("utf-8")
+    return img_base64
