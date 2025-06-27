@@ -7,27 +7,25 @@ from .data_store import candles, signals, advanced_signals
 from .analyzer import analyze_market
 
 def plot_chart(ticker: str, timeframe: str):
-    key = f"{ticker}_{timeframe}"
+    key = (ticker, timeframe)
     df = candles.get(key, [])
     if not df:
         return f"No data for {ticker} {timeframe}"
 
-    # Преобразуем в DataFrame
     df = pd.DataFrame(df)
     df["time"] = pd.to_datetime(df["time"])
     df.set_index("time", inplace=True)
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Отображаем свечи
+    # Свечи
     for idx, row in df.iterrows():
         color = 'green' if row['close'] >= row['open'] else 'red'
-        ax.plot([idx, idx], [row['low'], row['high']], color='black')  # тень
-        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)  # тело
+        ax.plot([idx, idx], [row['low'], row['high']], color='black')
+        ax.plot([idx, idx], [row['open'], row['close']], color=color, linewidth=4)
 
     # Простые сигналы
-    sigs = signals.get((ticker, timeframe), [])
-    for s in sigs:
+    for s in signals.get(key, []):
         t = pd.to_datetime(s["time"])
         label = s["action"]
         color = "blue" if label == "buy" else "orange"
@@ -35,8 +33,7 @@ def plot_chart(ticker: str, timeframe: str):
         ax.text(t, ax.get_ylim()[1], label.upper(), rotation=90, color=color, verticalalignment='top')
 
     # Расширенные сигналы
-    adv = advanced_signals.get((ticker, timeframe), [])
-    for s in adv:
+    for s in advanced_signals.get(key, []):
         t = pd.to_datetime(s["time"])
         if s["action"] == "tp_sl":
             side = s.get("side", "flat")
@@ -57,16 +54,19 @@ def plot_chart(ticker: str, timeframe: str):
             f"Strength: {analysis['trend_strength']}\n"
             f"Entry: {analysis['entry_side']} ({analysis['entry_optimality']}%)"
         )
-        ax.text(0.01, 0.95, text, transform=ax.transAxes,
-                fontsize=10, verticalalignment='top',
-                bbox=dict(boxstyle="round", facecolor="white", alpha=0.6))
+        ax.text(
+            1.01, 0.99, text,
+            transform=ax.transAxes,
+            verticalalignment='top',
+            fontsize=10,
+            bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+        )
 
     ax.set_title(f"{ticker} {timeframe} Chart")
     ax.xaxis.set_major_formatter(DateFormatter('%H:%M:%S'))
     plt.xticks(rotation=45)
     plt.tight_layout()
 
-    # Конвертация в PNG
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
