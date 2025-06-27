@@ -2,34 +2,39 @@
 <html>
 <head>
   <title>Autonomous Trade Forecast System</title>
-  <meta http-equiv="refresh" content="60">
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-    button { margin: 5px; padding: 10px 15px; font-size: 16px; }
-    img { margin-top: 20px; max-width: 90%; border: 1px solid #ccc; }
-  </style>
+  <meta charset="UTF-8" />
   <script>
-    function changeChart(tf) {
-      const img = document.getElementById("chart");
-      img.src = "/plot?ticker=GBPUSD&timeframe=" + tf + "&_=" + new Date().getTime();
+    async function updatePlot() {
+      const ticker = document.getElementById("ticker").value;
+      const timeframe = document.getElementById("timeframe").value;
+      const url = `/plot?ticker=${ticker}&timeframe=${timeframe}&_=${Date.now()}`;
+      document.getElementById("chart").src = url;
     }
+
+    setInterval(updatePlot, 10000); // обновление каждые 10 сек
+    window.onload = updatePlot;
   </script>
 </head>
-<body>
-  <h1>📈 Autonomous Trade Forecast System</h1>
-  <div>
-    <button onclick="changeChart('5S')">5S</button>
-    <button onclick="changeChart('15S')">15S</button>
-    <button onclick="changeChart('30S')">30S</button>
-    <button onclick="changeChart('45S')">45S</button>
-    <button onclick="changeChart('1')">1m</button>
-    <button onclick="changeChart('2')">2m</button>
-    <button onclick="changeChart('5')">5m</button>
-    <button onclick="changeChart('10')">10m</button>
-    <button onclick="changeChart('15')">15m</button>
-    <button onclick="changeChart('30')">30m</button>
-    <button onclick="changeChart('45')">45m</button>
-  </div>
-  <img id="chart" src="/plot?ticker=GBPUSD&timeframe=15S" alt="Loading chart...">
+<body style="font-family: sans-serif; background-color: #f5f5f5;">
+  <h2>📈 Autonomous Trade Forecast System</h2>
+
+  <label for="ticker">Ticker:</label>
+  <select id="ticker" onchange="updatePlot()">
+    <option>GBPUSD</option>
+  </select>
+
+  <label for="timeframe">Timeframe:</label>
+  <select id="timeframe" onchange="updatePlot()">
+    <option>15S</option>
+    <option>30S</option>
+    <option>1m</option>
+    <option>2m</option>
+    <option>5m</option>
+    <option>15m</option>
+    <option>30m</option>
+  </select>
+
+  <br><br>
+  <img id="chart" src="" style="width: 100%; max-width: 1200px; border: 1px solid #ccc;" />
 </body>
 </html>
