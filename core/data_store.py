@@ -31,9 +31,13 @@ def store_signal(data, advanced=False):
     date = datetime.utcnow().strftime("%Y-%m-%d")
     filename = f"{DATA_DIR}/{ticker}_{tf}_{date}_signals.jsonl"
 
+    action = data["action"].lower()
+    if action == "close":
+        action = "tp_sl"
+
     signal = {
         "time": data["time"],
-        "action": data["action"]
+        "action": action
     }
 
     if not advanced:
@@ -43,6 +47,6 @@ def store_signal(data, advanced=False):
     with open(filename, "a") as f:
         f.write(json.dumps(signal) + "\n")
 
-# Заглушка — позже заменим на реальный загрузчик истории
+# Заглушка для модели — позже подключим реальные свечи
 def get_recent_candles(ticker, timeframe, limit=50):
     return []
