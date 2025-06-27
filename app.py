@@ -1,16 +1,17 @@
 from flask import Flask, request, jsonify, send_file
-from core.webhook_handler import handle_webhook
 from core.data_store import load_data, store_candle, store_signal, store_advanced
 from core.visualize import visualize_plot
+from core.webhook_handler import handle_webhook
 
 app = Flask(__name__)
 
-# Загружаем данные из db.json
-data = load_data()
+# Загрузка истории
+print("[DB] Загрузка истории...")
+load_data()
 
 @app.route("/")
 def index():
-    return send_file("frontend/index.html")
+    return send_file("static/index.html")
 
 @app.route("/plot")
 def plot():
@@ -19,26 +20,15 @@ def plot():
     if not ticker or not timeframe:
         return jsonify({"status": "error", "message": "Missing parameters"}), 400
 
-    candles = data.get("candles", {}).get(ticker, {}).get(timeframe.upper(), [])
-    signals = data.get("signals", {}).get(ticker, {}).get(timeframe.upper(), [])
-    advanced = data.get("advanced", {}).get(ticker, {}).get(timeframe.upper(), [])
-
-    if not candles:
+    img_bytes = visualize_plot(ticker, timeframe)
+    if img_bytes is None:
         return jsonify({"status": "error", "message": "No data"}), 404
 
-    # Визуализируем
-    output_path = visualize_plot(ticker, timeframe, candles, signals, advanced)
-    return send_file(output_path, mimetype="image/png")
+    return send_file(img_bytes, mimetype="image/png")
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    try:
-        payload = request.json
-        handle_webhook(payload, data)
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        print(f"[ERROR] Webhook error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+    return handle_webhook(request)
 
 if __name__ == "__main__":
-    app.run(debug=False, port=10000, host="0.0.0.0")
+    app.run(host="0.0.0.0", port=10000)
