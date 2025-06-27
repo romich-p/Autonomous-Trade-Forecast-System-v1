@@ -31,14 +31,19 @@ def store_signal(data, advanced=False):
     date = datetime.utcnow().strftime("%Y-%m-%d")
     filename = f"{DATA_DIR}/{ticker}_{tf}_{date}_signals.jsonl"
 
-    action = data["action"].lower()
-    if action == "close":
-        action = "tp_sl"
+    raw_action = data.get("action", "").lower()
+    action = "tp_sl" if raw_action == "close" else raw_action
 
     signal = {
         "time": data["time"],
         "action": action
     }
+
+    if "sltp" in data:
+        try:
+            signal["sltp"] = float(data["sltp"])
+        except ValueError:
+            pass
 
     if not advanced:
         signal["position_size"] = data.get("position_size")
@@ -47,6 +52,5 @@ def store_signal(data, advanced=False):
     with open(filename, "a") as f:
         f.write(json.dumps(signal) + "\n")
 
-# Заглушка для модели — позже подключим реальные свечи
 def get_recent_candles(ticker, timeframe, limit=50):
     return []
