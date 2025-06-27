@@ -1,0 +1,20 @@
+<!-- static/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Trade Forecast System</title>
+</head>
+<body>
+    <h1>📈 Trade Forecast System</h1>
+    <form method="GET" action="/plot">
+        <label>Ticker:
+            <input type="text" name="ticker" value="GBPUSD" required>
+        </label>
+        <label>Timeframe:
+            <input type="text" name="timeframe" value="15S" required>
+        </label>
+        <button type="submit">Generate Plot</button>
+    </form>
+</body>
+</html>
