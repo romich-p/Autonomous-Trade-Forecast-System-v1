@@ -1,74 +1,40 @@
-import json
 import os
-from datetime import datetime
-from collections import defaultdict
+import json
 
-DB_FILE = "db.json"
+DB_PATH = "db.json"
 
-# Структура хранилища в памяти
-db = {
-    "candles": defaultdict(list),
-    "signals": defaultdict(list),
-    "advanced": defaultdict(list),
-}
-
-# Загрузка данных с диска
-def load_db():
-    if not os.path.exists(DB_FILE):
+def load_data():
+    if not os.path.exists(DB_PATH):
         print("[DB] db.json не найден, создаём новый файл")
-        return
+        return {"candles": {}, "signals": {}, "advanced": {}}
+    with open(DB_PATH, "r") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print("[DB] Ошибка чтения JSON — создаём новый")
+            data = {"candles": {}, "signals": {}, "advanced": {}}
+    print(f"[DB] Загружено: {len(data.get('candles', {}))} свечей, "
+          f"{len(data.get('signals', {}))} сигналов, {len(data.get('advanced', {}))} advanced")
+    return data
 
-    try:
-        with open(DB_FILE, "r") as f:
-            raw = json.load(f)
-            db["candles"] = defaultdict(list, {
-                k: v for k, v in raw.get("candles", {}).items()
-            })
-            db["signals"] = defaultdict(list, {
-                k: v for k, v in raw.get("signals", {}).items()
-            })
-            db["advanced"] = defaultdict(list, {
-                k: v for k, v in raw.get("advanced", {}).items()
-            })
-            print(f"[DB] Загружено: {sum(len(v) for v in db['candles'].values())} свечей, {sum(len(v) for v in db['signals'].values())} сигналов, {sum(len(v) for v in db['advanced'].values())} advanced")
-    except Exception as e:
-        print("[DB] Ошибка при загрузке:", e)
+def save_data(data):
+    with open(DB_PATH, "w") as f:
+        json.dump(data, f)
 
-# Сохранение данных на диск
-def save_db():
-    try:
-        with open(DB_FILE, "w") as f:
-            json.dump({
-                "candles": db["candles"],
-                "signals": db["signals"],
-                "advanced": db["advanced"],
-            }, f)
-    except Exception as e:
-        print("[DB] Ошибка при сохранении:", e)
+def store_candle(data, timeframe, candle):
+    ticker = candle["ticker"]
+    tf = timeframe.upper()
+    data.setdefault("candles", {}).setdefault(ticker, {}).setdefault(tf, []).append(candle)
+    save_data(data)
 
-# Вернуть данные по тикеру и ТФ
-def get_data_by_pair_and_tf(ticker, timeframe):
-    key = f"{ticker}_{timeframe}"
-    return (
-        db["candles"].get(key, []),
-        db["signals"].get(key, []),
-        db["advanced"].get(key, []),
-    )
+def store_signal(data, signal):
+    ticker = signal["ticker"]
+    tf = signal["timeframe"].upper()
+    data.setdefault("signals", {}).setdefault(ticker, {}).setdefault(tf, []).append(signal)
+    save_data(data)
 
-def store_candle(ticker, timeframe, candle):
-    key = f"{ticker}_{timeframe}"
-    db["candles"][key].append(candle)
-    save_db()
-
-def store_signal(ticker, timeframe, signal):
-    key = f"{ticker}_{timeframe}"
-    db["signals"][key].append(signal)
-    save_db()
-
-def store_advanced(ticker, timeframe, advanced):
-    key = f"{ticker}_{timeframe}"
-    db["advanced"][key].append(advanced)
-    save_db()
-
-# Загружаем базу при старте
-load_db()
+def store_advanced(data, advanced):
+    ticker = advanced["ticker"]
+    tf = advanced["timeframe"].upper()
+    data.setdefault("advanced", {}).setdefault(ticker, {}).setdefault(tf, []).append(advanced)
+    save_data(data)
