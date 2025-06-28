@@ -1,20 +1,33 @@
-from core.data_store import store_candle, store_signal, store_advanced
+from core.data_store import load_database, save_database
 
-def handle_webhook(data):
-    if 'type' not in data:
-        return {"status": "error", "message": "Missing type"}
-    
-    data_type = data['type']
-    ticker = data.get('ticker', 'GBPUSD')  # по умолчанию
-    timeframe = data.get('timeframe', '15S')
+def handle_webhook(payload):
+    db = load_database()
 
-    if data_type == 'candle':
-        store_candle(ticker, timeframe, data['data'])
-    elif data_type == 'signal':
-        store_signal(data)
-    elif data_type == 'advanced':
-        store_advanced(data)
+    if db is None:
+        db = {}
+
+    ticker = payload.get("ticker")
+    timeframe = payload.get("timeframe")
+
+    if not ticker or not timeframe:
+        print("[Webhook] Пропущен ticker или timeframe")
+        return
+
+    key = f"{ticker}_{timeframe}"
+    if key not in db:
+        db[key] = {"candles": [], "signals": [], "advanced": []}
+
+    signal_type = payload.get("type")
+
+    if signal_type == "candle":
+        db[key]["candles"].append(payload)
+    elif signal_type == "sma":
+        db[key]["signals"].append(payload)
+    elif signal_type == "technical":
+        db[key]["advanced"].append(payload)
     else:
-        return {"status": "error", "message": "Unknown type"}
+        print(f"[Webhook] Неизвестный тип данных: {signal_type}")
+        return
 
-    return {"status": "ok"}
+    save_database(db)
+    print(f"[Webhook] Обработан сигнал для {key} [{signal_type}]")
