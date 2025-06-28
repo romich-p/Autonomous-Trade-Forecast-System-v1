@@ -1,102 +1,69 @@
-import os
 import json
-from tinydb import TinyDB, Query
+import os
+from typing import Optional
 
 DB_PATH = "db.json"
 
-# Гарантируем, что директория под файл существует
-os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+DEFAULT_DB_STRUCTURE = {
+    "candles": {},
+    "signals": {},
+    "advanced_signals": {}
+}
 
-# Загружаем TinyDB
-db = TinyDB(DB_PATH)
+# Инициализация базы при старте
+if not os.path.exists(DB_PATH) or os.stat(DB_PATH).st_size == 0:
+    with open(DB_PATH, "w") as f:
+        json.dump(DEFAULT_DB_STRUCTURE, f)
 
-# Режим отладки
-DEBUG = True
 
-def log(*args):
-    if DEBUG:
-        print("[DB]", *args)
-
-# --- LOW LEVEL ---
-
-def load_database():
+def load_database() -> dict:
     try:
         with open(DB_PATH, "r") as f:
-            data = json.load(f)
-            log("Загружена база:", list(data.keys()))
-            return data
+            return json.load(f)
     except Exception as e:
-        log("Ошибка загрузки базы:", e)
-        return {
-            "candles": {},
-            "signals": {},
-            "advanced_signals": {}
-        }
+        print(f"[DB] Ошибка загрузки базы: {e}")
+        return DEFAULT_DB_STRUCTURE.copy()
 
-def save_database(data):
-    try:
-        with open(DB_PATH, "w") as f:
-            json.dump(data, f, indent=2)
-        log("База сохранена.")
-    except Exception as e:
-        log("Ошибка сохранения базы:", e)
 
-# --- HIGH LEVEL ---
+def save_database(db: dict):
+    with open(DB_PATH, "w") as f:
+        json.dump(db, f, indent=2)
 
-def store_candle(payload):
-    data = load_database()
-    key = f"{payload['ticker']}_{payload['timeframe']}"
-    record = {
-        "time": payload["time"],
-        "open": payload["open"],
-        "high": payload["high"],
-        "low": payload["low"],
-        "close": payload["close"],
-        "volume": payload["volume"]
-    }
-    data.setdefault("candles", {}).setdefault(key, []).append(record)
-    log(f"Добавлена свеча {key} ->", record)
-    save_database(data)
 
-def store_signal(payload):
-    data = load_database()
-    key = f"{payload['ticker']}_{payload['timeframe']}"
-    signal = {
-        "time": payload["time"],
-        "strategy": payload.get("strategy"),
-        "signal": payload.get("signal"),
-        "side": payload.get("side")
-    }
-    data.setdefault("signals", {}).setdefault(key, []).append(signal)
-    log(f"Добавлен сигнал {key} ->", signal)
-    save_database(data)
+def store_candle(ticker: str, timeframe: str, candle: dict):
+    db = load_database()
+    candles = db.setdefault("candles", {})
+    key = f"{ticker}|{timeframe}"
+    candles.setdefault(key, []).append(candle)
+    save_database(db)
 
-def store_advanced(payload):
-    data = load_database()
-    key = f"{payload['ticker']}_{payload['timeframe']}"
-    result = {
-        "time": payload["time"],
-        "trend": payload.get("trend"),
-        "entry_score": payload.get("entry_score"),
-        "side": payload.get("side")
-    }
-    data.setdefault("advanced_signals", {}).setdefault(key, []).append(result)
-    log(f"Добавлен advanced сигнал {key} ->", result)
-    save_database(data)
 
-# --- READERS ---
+def store_signal(ticker: str, timeframe: str, signal: dict):
+    db = load_database()
+    signals = db.setdefault("signals", {})
+    key = f"{ticker}|{timeframe}"
+    signals.setdefault(key, []).append(signal)
+    save_database(db)
 
-def get_candles(ticker, timeframe):
-    data = load_database()
-    key = f"{ticker}_{timeframe}"
-    return data.get("candles", {}).get(key, [])
 
-def get_signals(ticker, timeframe):
-    data = load_database()
-    key = f"{ticker}_{timeframe}"
-    return data.get("signals", {}).get(key, [])
+def store_advanced(ticker: str, timeframe: str, signal: dict):
+    db = load_database()
+    signals = db.setdefault("advanced_signals", {})
+    key = f"{ticker}|{timeframe}"
+    signals.setdefault(key, []).append(signal)
+    save_database(db)
 
-def get_advanced_signals(ticker, timeframe):
-    data = load_database()
-    key = f"{ticker}_{timeframe}"
-    return data.get("advanced_signals", {}).get(key, [])
+
+def get_candles(ticker: str, timeframe: str) -> list:
+    db = load_database()
+    return db.get("candles", {}).get(f"{ticker}|{timeframe}", [])
+
+
+def get_signals(ticker: str, timeframe: str) -> list:
+    db = load_database()
+    return db.get("signals", {}).get(f"{ticker}|{timeframe}", [])
+
+
+def get_advanced_signals(ticker: str, timeframe: str) -> list:
+    db = load_database()
+    return db.get("advanced_signals", {}).get(f"{ticker}|{timeframe}", [])
