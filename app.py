@@ -40,22 +40,15 @@ def plot():
     return send_file(img_bytes, mimetype="image/png")
 
 @app.route("/status")
+@app.route("/status")
 def status():
     db = load_database()
-    summary = []
+    if not db:
+        return jsonify({"pairs": [], "status": "ok"})
+    
+    result = {"pairs": list(db.keys()), "status": "ok"}
+    return jsonify(result)
 
-    for key, records in db.items():
-        n_candles = len(records.get("candles", []))
-        n_signals = len(records.get("signals", []))
-        n_advanced = len(records.get("advanced", []))
-        summary.append({
-            "key": key,
-            "candles": n_candles,
-            "signals": n_signals,
-            "advanced": n_advanced,
-        })
-
-    return jsonify({"status": "ok", "pairs": summary})
 
 @app.route("/")
 def index():
