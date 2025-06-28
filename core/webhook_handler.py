@@ -1,33 +1,39 @@
-from core.data_store import load_database, save_database
+import json
+from flask import request
+from core.data_store import store_candle, store_signal, store_advanced
 
-def handle_webhook(payload):
-    db = load_database()
+def handle_webhook():
+    try:
+        payload = request.get_json(force=True)
+        if not payload:
+            return {"status": "error", "message": "Empty payload"}, 400
 
-    if db is None:
-        db = {}
+        event_type = payload.get("event")
+        ticker = payload.get("ticker", "").upper()
+        timeframe = payload.get("timeframe", "").upper()
 
-    ticker = payload.get("ticker")
-    timeframe = payload.get("timeframe")
+        if not ticker or not timeframe:
+            return {"status": "error", "message": "Missing ticker or timeframe"}, 400
 
-    if not ticker or not timeframe:
-        print("[Webhook] Пропущен ticker или timeframe")
-        return
+        if event_type == "candle":
+            store_candle(ticker, timeframe, payload)
+            print(f"[WEBHOOK] Candle received: {ticker} {timeframe}")
+            return {"status": "ok"}
 
-    key = f"{ticker}_{timeframe}"
-    if key not in db:
-        db[key] = {"candles": [], "signals": [], "advanced": []}
+        elif event_type == "sma_cross":
+            store_signal(ticker, timeframe, payload)
+            print(f"[WEBHOOK] SMA signal received: {ticker} {timeframe}")
+            return {"status": "ok"}
 
-    signal_type = payload.get("type")
+        elif event_type == "tp_sl":
+            store_advanced(ticker, timeframe, payload)
+            print(f"[WEBHOOK] Advanced signal received: {ticker} {timeframe}")
+            return {"status": "ok"}
 
-    if signal_type == "candle":
-        db[key]["candles"].append(payload)
-    elif signal_type == "sma":
-        db[key]["signals"].append(payload)
-    elif signal_type == "technical":
-        db[key]["advanced"].append(payload)
-    else:
-        print(f"[Webhook] Неизвестный тип данных: {signal_type}")
-        return
+        else:
+            print(f"[WEBHOOK] Unknown event type: {event_type}")
+            return {"status": "error", "message": "Unknown event type"}, 400
 
-    save_database(db)
-    print(f"[Webhook] Обработан сигнал для {key} [{signal_type}]")
+    except Exception as e:
+        print(f"[ERROR] Webhook exception: {e}")
+        return {"status": "error", "message": str(e)}, 500
