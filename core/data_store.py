@@ -1,66 +1,53 @@
-# core/data_store.py
-
 import os
 import json
 from tinydb import TinyDB, Query
 
 DB_PATH = "db.json"
-db_dir = os.path.dirname(DB_PATH)
 
-# Создаём директорию, если указана и не пуста
-if db_dir:
-    os.makedirs(db_dir, exist_ok=True)
+# Гарантируем, что папка существует
+os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 
-db = TinyDB(DB_PATH)
+# Загрузка всей базы
+def load_database():
+    if not os.path.exists(DB_PATH):
+        print("[DB] db.json не найден, создаём новый файл")
+        save_database({})
+        return {}
+    with open(DB_PATH, "r") as f:
+        return json.load(f)
 
-candles_table = db.table("candles")
-signals_table = db.table("signals")
-advanced_table = db.table("advanced")
+# Сохранение всей базы
+def save_database(data):
+    with open(DB_PATH, "w") as f:
+        json.dump(data, f)
 
-
+# Прочие функции, например:
 def store_candle(ticker, timeframe, candle):
-    candles_table.insert({
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "candle": candle
-    })
-
-
-def store_signal(ticker, timeframe, signal):
-    signals_table.insert({
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "signal": signal
-    })
-
-
-def store_advanced(ticker, timeframe, signal):
-    advanced_table.insert({
-        "ticker": ticker,
-        "timeframe": timeframe,
-        "signal": signal
-    })
-
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    db.setdefault(key, {}).setdefault("candles", []).append(candle)
+    save_database(db)
 
 def get_candles(ticker, timeframe):
-    Candle = Query()
-    return [
-        item["candle"]
-        for item in candles_table.search((Candle.ticker == ticker) & (Candle.timeframe == timeframe))
-    ]
-
+    db = load_database()
+    return db.get(f"{ticker}_{timeframe}", {}).get("candles", [])
 
 def get_signals(ticker, timeframe):
-    Signal = Query()
-    return [
-        item["signal"]
-        for item in signals_table.search((Signal.ticker == ticker) & (Signal.timeframe == timeframe))
-    ]
-
+    db = load_database()
+    return db.get(f"{ticker}_{timeframe}", {}).get("signals", [])
 
 def get_advanced_signals(ticker, timeframe):
-    Adv = Query()
-    return [
-        item["signal"]
-        for item in advanced_table.search((Adv.ticker == ticker) & (Adv.timeframe == timeframe))
-    ]
+    db = load_database()
+    return db.get(f"{ticker}_{timeframe}", {}).get("advanced", [])
+
+def store_signal(ticker, timeframe, signal):
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    db.setdefault(key, {}).setdefault("signals", []).append(signal)
+    save_database(db)
+
+def store_advanced(ticker, timeframe, signal):
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    db.setdefault(key, {}).setdefault("advanced", []).append(signal)
+    save_database(db)
