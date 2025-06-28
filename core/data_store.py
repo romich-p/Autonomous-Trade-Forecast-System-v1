@@ -3,7 +3,7 @@ import json
 
 DB_PATH = os.environ.get("DB_PATH", "db.json")
 
-# Убедимся, что путь существует
+# Создаём директорию, если указана
 if os.path.dirname(DB_PATH):
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
@@ -24,3 +24,18 @@ def save_database(db):
             json.dump(db, f)
     except Exception as e:
         print(f"[DB] Ошибка сохранения базы: {e}")
+
+def get_candles(ticker, timeframe):
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    return db.get(key, {}).get("candles", [])
+
+def get_signals(ticker, timeframe):
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    return db.get(key, {}).get("signals", [])
+
+def get_advanced_signals(ticker, timeframe):
+    db = load_database()
+    key = f"{ticker}_{timeframe}"
+    return db.get(key, {}).get("advanced", [])
