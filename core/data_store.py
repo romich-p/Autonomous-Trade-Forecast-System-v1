@@ -55,6 +55,14 @@ def get_signals(ticker, timeframe):
 
 def get_advanced_signals(ticker, timeframe):
     return advanced_signals.get(normalize_ticker(ticker), {}).get(timeframe, [])
+    
+def load_database():
+    try:
+        with open(DB_PATH, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        print("[DB] db.json не найден или повреждён — создаём заново")
+        return {}
 
 def get_all_pairs():
     return list(candles.keys())
