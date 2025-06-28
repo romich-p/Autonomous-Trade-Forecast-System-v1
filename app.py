@@ -48,6 +48,10 @@ def status():
     
     result = {"pairs": list(db.keys()), "status": "ok"}
     return jsonify(result)
+@app.route("/debug/db", methods=["GET"])
+def debug_db():
+    db = load_database()
+    return jsonify(db)
 
 
 @app.route("/")
