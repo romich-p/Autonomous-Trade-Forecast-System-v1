@@ -72,3 +72,7 @@ def load_database():
     print(f"[DB] Загружено: {sum(len(t) for t in candles.values())} свечей, "
           f"{sum(len(t) for t in signals.values())} сигналов, "
           f"{sum(len(t) for t in advanced_signals.values())} advanced")
+
+def save_database():
+    db.storage.flush()  # Принудительно сбрасываем кэш на диск
+    print("[DB] Сохранено в файл")
