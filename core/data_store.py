@@ -1,41 +1,52 @@
 import os
 import json
+from collections import defaultdict
 
-DB_PATH = os.environ.get("DB_PATH", "db.json")
+DB_PATH = "db.json"
 
-# Создаём директорию, если указана
-if os.path.dirname(DB_PATH):
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Создаём пустую структуру, если файл отсутствует
+if not os.path.exists(DB_PATH):
+    print("[DB] db.json не найден, создаём новый файл")
+    with open(DB_PATH, "w") as f:
+        json.dump({}, f)
 
 def load_database():
-    if not os.path.exists(DB_PATH):
-        print("[DB] db.json не найден, создаём новый файл")
-        return {}
     try:
         with open(DB_PATH, "r") as f:
             return json.load(f)
-    except Exception as e:
-        print(f"[DB] Ошибка загрузки базы: {e}")
+    except Exception:
         return {}
 
 def save_database(db):
-    try:
-        with open(DB_PATH, "w") as f:
-            json.dump(db, f)
-    except Exception as e:
-        print(f"[DB] Ошибка сохранения базы: {e}")
+    with open(DB_PATH, "w") as f:
+        json.dump(db, f, indent=2)
+
+def store_candle(ticker, timeframe, data):
+    db = load_database()
+    key = f"{ticker}:{timeframe}"
+    db.setdefault(key, {}).setdefault("candles", []).append(data)
+    save_database(db)
+
+def store_signal(ticker, timeframe, data):
+    db = load_database()
+    key = f"{ticker}:{timeframe}"
+    db.setdefault(key, {}).setdefault("signals", []).append(data)
+    save_database(db)
+
+def store_advanced(ticker, timeframe, data):
+    db = load_database()
+    key = f"{ticker}:{timeframe}"
+    db.setdefault(key, {}).setdefault("advanced_signals", []).append(data)
+    save_database(db)
 
 def get_candles(ticker, timeframe):
     db = load_database()
-    key = f"{ticker}_{timeframe}"
-    return db.get(key, {}).get("candles", [])
+    return db.get(f"{ticker}:{timeframe}", {}).get("candles", [])
 
 def get_signals(ticker, timeframe):
     db = load_database()
-    key = f"{ticker}_{timeframe}"
-    return db.get(key, {}).get("signals", [])
+    return db.get(f"{ticker}:{timeframe}", {}).get("signals", [])
 
 def get_advanced_signals(ticker, timeframe):
     db = load_database()
-    key = f"{ticker}_{timeframe}"
-    return db.get(key, {}).get("advanced", [])
+    return db.get(f"{ticker}:{timeframe}", {}).get("advanced_signals", [])
