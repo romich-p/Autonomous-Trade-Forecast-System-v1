@@ -1,79 +1,66 @@
+# core/data_store.py
+
 import os
 import json
 from tinydb import TinyDB, Query
-from collections import defaultdict
 
 DB_PATH = "db.json"
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+db_dir = os.path.dirname(DB_PATH)
 
-if not os.path.exists(DB_PATH):
-    print("[DB] db.json не найден, создаём новый файл")
-    with open(DB_PATH, "w") as f:
-        json.dump({}, f)
+# Создаём директорию, если указана и не пуста
+if db_dir:
+    os.makedirs(db_dir, exist_ok=True)
 
 db = TinyDB(DB_PATH)
-candles = defaultdict(lambda: defaultdict(list))
-signals = defaultdict(lambda: defaultdict(list))
-advanced_signals = defaultdict(lambda: defaultdict(list))
 
-
-def load_all_data():
-    global candles, signals, advanced_signals
-    candles = defaultdict(lambda: defaultdict(list))
-    signals = defaultdict(lambda: defaultdict(list))
-    advanced_signals = defaultdict(lambda: defaultdict(list))
-    for row in db.all():
-        t = row.get("type")
-        ticker = row.get("ticker")
-        tf = row.get("timeframe")
-        if t == "candle":
-            candles[ticker][tf].append(row["data"])
-        elif t == "signal":
-            signals[ticker][tf].append(row["data"])
-        elif t == "advanced":
-            advanced_signals[ticker][tf].append(row["data"])
-    print(f"[DB] Загружено: {sum(len(v) for tf in candles.values() for v in tf.values())} свечей, "
-          f"{sum(len(v) for tf in signals.values() for v in tf.values())} сигналов, "
-          f"{sum(len(v) for tf in advanced_signals.values() for v in tf.values())} advanced")
+candles_table = db.table("candles")
+signals_table = db.table("signals")
+advanced_table = db.table("advanced")
 
 
 def store_candle(ticker, timeframe, candle):
-    db.insert({
-        "type": "candle",
+    candles_table.insert({
         "ticker": ticker,
         "timeframe": timeframe,
-        "data": candle
+        "candle": candle
     })
-    candles[ticker][timeframe].append(candle)
 
 
 def store_signal(ticker, timeframe, signal):
-    db.insert({
-        "type": "signal",
+    signals_table.insert({
         "ticker": ticker,
         "timeframe": timeframe,
-        "data": signal
+        "signal": signal
     })
-    signals[ticker][timeframe].append(signal)
 
 
-def store_advanced(ticker, timeframe, advanced_signal):
-    db.insert({
-        "type": "advanced",
+def store_advanced(ticker, timeframe, signal):
+    advanced_table.insert({
         "ticker": ticker,
         "timeframe": timeframe,
-        "data": advanced_signal
+        "signal": signal
     })
-    advanced_signals[ticker][timeframe].append(advanced_signal)
 
 
 def get_candles(ticker, timeframe):
-    return candles.get(ticker, {}).get(timeframe, [])
+    Candle = Query()
+    return [
+        item["candle"]
+        for item in candles_table.search((Candle.ticker == ticker) & (Candle.timeframe == timeframe))
+    ]
 
 
 def get_signals(ticker, timeframe):
-    return signals.get(ticker, {}).get(timeframe, [])
+    Signal = Query()
+    return [
+        item["signal"]
+        for item in signals_table.search((Signal.ticker == ticker) & (Signal.timeframe == timeframe))
+    ]
 
 
 def get_advanced_signals(ticker, timeframe):
-    return advanced_signals.get(ticker, {}).get(timeframe, [])
+    Adv = Query()
+    return [
+        item["signal"]
+        for item in advanced_table.search((Adv.ticker == ticker) & (Adv.timeframe == timeframe))
+    ]
