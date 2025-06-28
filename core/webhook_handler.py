@@ -37,3 +37,7 @@ def handle_webhook():
     except Exception as e:
         print(f"[ERROR] Webhook exception: {e}")
         return {"status": "error", "message": str(e)}, 500
+
+def handle_webhook(data):
+    print("[Webhook] RAW DATA:", data)  # Добавь эту строку
+    ...
